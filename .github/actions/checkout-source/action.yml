@@ -1,46 +1,36 @@
 name: Checkout the private Dialetto source
 description: >
-  Clones lucasouzadev/dialetto (private) into ./src with a read-only deploy key.
-  Call actions/checkout for THIS repository first (the local actions and the
-  e2e flows live here), then this step.
+  Clones lucasouzadev/dialetto (private) into ./src with a read-only deploy key,
+  through scripts/checkout-private-source.sh (which repairs a damaged key and
+  explains a wrong one). Call actions/checkout for THIS repository first: the
+  script, the local actions and the e2e flows live here.
 
 inputs:
   ssh-key:
     description: Private half of the read-only deploy key (secret DIALETTO_DEPLOY_KEY).
     required: true
   ref:
-    description: Branch, tag or commit of the private repository to build.
+    description: Branch, tag or full commit sha of the private repository to build.
     required: false
     default: main
 
 outputs:
   sha:
     description: Full commit sha that was checked out.
-    value: ${{ steps.sha.outputs.sha }}
+    value: ${{ steps.clone.outputs.sha }}
   short:
     description: First 7 characters of the commit sha.
-    value: ${{ steps.sha.outputs.short }}
+    value: ${{ steps.clone.outputs.short }}
 
 runs:
   using: composite
   steps:
-    - name: Check out the source
-      uses: actions/checkout@v4
-      with:
-        repository: lucasouzadev/dialetto
-        ref: ${{ inputs.ref }}
-        ssh-key: ${{ inputs.ssh-key }}
-        path: src
-        fetch-depth: 1
-        persist-credentials: false
-
     # Only the hash is ever printed: this repository is public, so its logs are
     # too, and a private commit message does not belong in them.
-    - name: Record which commit this is
-      id: sha
+    - name: Clone the private source
+      id: clone
       shell: bash
-      run: |
-        sha="$(git -C src rev-parse HEAD)"
-        echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-        echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
-        echo "Source commit: ${sha:0:7}"
+      env:
+        DEPLOY_KEY: ${{ inputs.ssh-key }}
+        REF: ${{ inputs.ref }}
+      run: bash "$GITHUB_WORKSPACE/scripts/checkout-private-source.sh"
