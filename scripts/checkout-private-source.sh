@@ -10,12 +10,18 @@
 # never printing it.
 #
 # Env:
-#   DEPLOY_KEY   the secret (required). The private key, as the file's text or
-#                as base64 of the file.
+#   DEPLOY_KEY   the secret (required). Either
+#                - an SSH private key (a read-only deploy key), as the file's text
+#                  or as base64 of the file -- the recommended form; or
+#                - a GitHub token (fine-grained `github_pat_...` or classic
+#                  `ghp_...`). A token is checked against the GitHub API first
+#                  and REFUSED if it can write to the repository, because this
+#                  workflow only ever needs to read.
 #   REF          branch, tag or full commit sha (default main)
 #   REPO         owner/name (default lucasouzadev/dialetto)
 #   DEST         where to clone (default src)
 #   REMOTE_URL   override the remote (tests only)
+#   API_BASE     override https://api.github.com (tests only)
 # Writes `sha` and `short` to $GITHUB_OUTPUT when it is set.
 set -euo pipefail
 
@@ -23,7 +29,6 @@ set -euo pipefail
 REF="${REF:-main}"
 REPO="${REPO:-lucasouzadev/dialetto}"
 DEST="${DEST:-src}"
-REMOTE_URL="${REMOTE_URL:-git@github.com:${REPO}.git}"
 
 fail() { echo "::error title=Deploy key::$*"; exit 1; }
 
@@ -56,36 +61,77 @@ last="$(tail -1 "$key")"
 lines="$(wc -l < "$key" | tr -d ' ')"
 echo "Secret shape: first line is a private-key header: $([[ "$first" == -----BEGIN*PRIVATE\ KEY----- ]] && echo yes || echo NO); last line is the END line: $([[ "$last" == -----END*PRIVATE\ KEY----- ]] && echo yes || echo NO); lines: $lines"
 
+mode=""
 case "$first" in
   ssh-*|ecdsa-*|"-----BEGIN PUBLIC KEY-----"*)
     fail "DIALETTO_DEPLOY_KEY holds the PUBLIC key. The secret must be the PRIVATE key (the file without .pub); the public one goes in the dialetto repository's Deploy keys." ;;
-  ghp_*|github_pat_*|gho_*|ghs_*)
-    fail "DIALETTO_DEPLOY_KEY holds a GitHub token, not an SSH key. Generate a key pair with: ssh-keygen -t ed25519 -N \"\" -f dialetto-builds-key" ;;
-  "-----BEGIN OPENSSH PRIVATE KEY-----"|"-----BEGIN RSA PRIVATE KEY-----"|"-----BEGIN EC PRIVATE KEY-----") ;;
+  ghp_*|github_pat_*|gho_*|ghs_*) mode=token ;;
+  "-----BEGIN OPENSSH PRIVATE KEY-----"|"-----BEGIN RSA PRIVATE KEY-----"|"-----BEGIN EC PRIVATE KEY-----") mode=ssh ;;
   *)
-    fail "DIALETTO_DEPLOY_KEY does not start with a private-key header (it starts with '${first:0:5}...'). Paste the whole file, from the BEGIN line to the END line, or its base64." ;;
+    fail "DIALETTO_DEPLOY_KEY does not start with a private-key header or a GitHub token (it starts with '${first:0:5}...'). Paste the whole key file, from the BEGIN line to the END line, or its base64." ;;
 esac
 
-# --- 3. Can OpenSSH read it? -------------------------------------------------
-# -P "" answers the passphrase question with an empty one, so a locked key
-# fails at once instead of waiting for someone to type.
-if ! pub="$(ssh-keygen -y -P "" -f "$key" 2>"$dir/err" </dev/null)"; then
-  reason="$(tr '\n' ' ' < "$dir/err")"
-  if grep -qi "passphrase" <<<"$reason"; then
-    fail "The key is protected by a passphrase, and CI cannot type one. Generate a new pair with an EMPTY passphrase: ssh-keygen -t ed25519 -N \"\" -f dialetto-builds-key. ($reason)"
+if [ "$mode" = token ]; then
+  # --- 3a. A GitHub token: use it only if it can READ and cannot WRITE -------
+  token="$(tr -d '[:space:]' < "$key")"
+  case "$token" in
+    github_pat_*) kind="fine-grained" ;;
+    ghp_*)        kind="classic" ;;
+    *)            kind="other" ;;
+  esac
+  echo "Credential: a GitHub token ($kind)."
+  if [ "$kind" = classic ]; then
+    echo "::warning title=Classic token::A classic token (ghp_...) reaches EVERY repository of its owner. Prefer a fine-grained token limited to $REPO with Contents: read-only, or an SSH deploy key."
   fi
-  fail "OpenSSH cannot parse the key even after repairing line endings. Re-copy the WHOLE private key file (BEGIN to END line) into the secret, or store base64 of the file instead. ($reason)"
+  api="${API_BASE:-https://api.github.com}"
+  status="$(curl -sS -m 20 -o "$dir/repo.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" \
+    "$api/repos/$REPO" 2>/dev/null)" || fail "Could not reach the GitHub API to check the token."
+  case "$status" in
+    200) ;;
+    401) fail "GitHub rejected the token (expired or revoked). Create a new one." ;;
+    403|404) fail "The token cannot see $REPO. A fine-grained token must list that repository and have Contents: read." ;;
+    *) fail "Unexpected answer ($status) from the GitHub API while checking the token." ;;
+  esac
+  can_write="$(python3 -I -c '
+import json, sys
+perms = json.load(open(sys.argv[1])).get("permissions") or {}
+print("yes" if perms.get("push") or perms.get("admin") or perms.get("maintain") else "no")
+' "$dir/repo.json")"
+  echo "Token check: can read $REPO: yes; can write: $can_write"
+  if [ "$can_write" = yes ]; then
+    fail "This token can WRITE to $REPO, and this workflow only needs to read. Use a fine-grained token with Contents: read-only, or an SSH deploy key (read-only)."
+  fi
+  header="$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+  export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
+  REMOTE_URL="${REMOTE_URL:-https://github.com/${REPO}.git}"
+else
+  # --- 3b. An SSH key: can OpenSSH read it? ----------------------------------
+  # -P "" answers the passphrase question with an empty one, so a locked key
+  # fails at once instead of waiting for someone to type.
+  if ! pub="$(ssh-keygen -y -P "" -f "$key" 2>"$dir/err" </dev/null)"; then
+    reason="$(tr '\n' ' ' < "$dir/err")"
+    if grep -qi "passphrase" <<<"$reason"; then
+      fail "The key is protected by a passphrase, and CI cannot type one. Generate a new pair with an EMPTY passphrase: ssh-keygen -t ed25519 -N \"\" -f dialetto-builds-key. ($reason)"
+    fi
+    fail "OpenSSH cannot parse the key even after repairing line endings. Re-copy the WHOLE private key file (BEGIN to END line) into the secret, or store base64 of the file instead. ($reason)"
+  fi
+  # The fingerprint of a PUBLIC key is safe to print: compare it with the one
+  # GitHub shows for the deploy key in the dialetto repository's settings.
+  echo "Deploy key fingerprint: $(ssh-keygen -lf /dev/stdin <<<"$pub")"
+  REMOTE_URL="${REMOTE_URL:-git@github.com:${REPO}.git}"
 fi
-# The fingerprint of a PUBLIC key is safe to print: compare it with the one
-# GitHub shows for the deploy key in the dialetto repository's settings.
-echo "Deploy key fingerprint: $(ssh-keygen -lf /dev/stdin <<<"$pub")"
 
-# --- 4. Clone, trusting only GitHub's published host key ---------------------
-# Fingerprint SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU
+# --- 4. Clone ----------------------------------------------------------------
+# SSH: trust only GitHub's published host key. Fingerprint
+# SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU
 # (https://docs.github.com/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
-echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$dir/known_hosts"
-
-export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$dir/known_hosts -o HostKeyAlgorithms=ssh-ed25519"
+if [ "$mode" = ssh ]; then
+  echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$dir/known_hosts"
+  export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$dir/known_hosts -o HostKeyAlgorithms=ssh-ed25519"
+fi
 rm -rf "$DEST"
 git init -q "$DEST"
 git -C "$DEST" remote add origin "$REMOTE_URL"

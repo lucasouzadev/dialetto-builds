@@ -54,12 +54,17 @@ O pacote OTA **não é construído aqui**. Cada deploy do site no Vercel publica
 
 ## Configuração (uma vez)
 
-### 1. Chave de leitura do repositório privado
+### 1. Acesso de leitura ao repositório privado
+O secret `DIALETTO_DEPLOY_KEY` aceita **uma de duas** credenciais. Em qualquer caso o workflow só **lê** o `dialetto`.
+
+**Opção A, recomendada: chave SSH de deploy** (só dá acesso a este repositório, e a leitura é imposta pelo GitHub).
 ```bash
 ssh-keygen -t ed25519 -N "" -C "dialetto-builds" -f dialetto-builds-key
 ```
 - `dialetto-builds-key.pub` → repositório **`dialetto`** → *Settings → Deploy keys → Add deploy key*, **sem** marcar "Allow write access".
 - `dialetto-builds-key` (a privada, o arquivo inteiro, da linha `BEGIN` à linha `END`) → secret `DIALETTO_DEPLOY_KEY` **deste** repositório. Também vale o **base64** do arquivo. Depois apague os dois arquivos locais.
+
+**Opção B: token do GitHub.** Crie um *fine-grained personal access token* (Settings → Developer settings → Fine-grained tokens) com **só** o repositório `lucasouzadev/dialetto` e a permissão **Contents: Read-only**, e cole-o no mesmo secret. Antes de clonar, o script consulta a API do GitHub e **recusa** o token se ele puder escrever no repositório. Token *classic* (`ghp_...`) alcança todos os seus repositórios: funciona se for somente-leitura, mas avisa; prefira o fine-grained. Um token que você não usa mais deve ser revogado.
 
 ### 2. Secrets (Settings → Secrets and variables → Actions)
 
@@ -109,7 +114,7 @@ O repositório é público, então estes ajustes importam:
 Com acesso a este repositório, o agente pode disparar os workflows e ler os resultados pela API do GitHub (`run_workflow`, logs de job, artefatos), então consegue rodar o E2E, ler o resumo e os screenshots, ajustar os fluxos e rodar de novo, sem depender de ninguém com o aparelho. Ele **não** dispara `ios-testflight` por conta própria.
 
 ## Problemas comuns
-- **`error in libcrypto` / `Permission denied (publickey)` no checkout**: o secret `DIALETTO_DEPLOY_KEY` chegou **malformado** (típico ao copiar de um editor do Windows: quebras `\r\n` ou falta da quebra de linha final). O script `scripts/checkout-private-source.sh` repara esses casos e, quando não dá, diz o motivo no log: chave **pública** colada por engano, **token** do GitHub no lugar da chave, chave **com senha** (gere com `-N ""`) ou arquivo incompleto. O log também mostra o **fingerprint** da chave; confira que ele é o mesmo que o GitHub mostra em *Deploy keys* do `dialetto`. Se o editor insistir em estragar a chave, guarde no secret o **base64 do arquivo** (`base64 -w0 dialetto-builds-key`; no PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("dialetto-builds-key"))`): o script aceita os dois formatos.
+- **`error in libcrypto` / `Permission denied (publickey)` no checkout**: o secret `DIALETTO_DEPLOY_KEY` chegou **malformado** (típico ao copiar de um editor do Windows: quebras `\r\n` ou falta da quebra de linha final). O script `scripts/checkout-private-source.sh` repara esses casos e, quando não dá, diz o motivo no log: chave **pública** colada por engano, chave **com senha** (gere com `-N ""`) ou arquivo incompleto. O log também mostra o **fingerprint** da chave; confira que ele é o mesmo que o GitHub mostra em *Deploy keys* do `dialetto`. Se o editor insistir em estragar a chave, guarde no secret o **base64 do arquivo** (`base64 -w0 dialetto-builds-key`; no PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("dialetto-builds-key"))`): o script aceita os dois formatos.
 - **`Permission denied (publickey)` com a chave legível** (o log mostra o fingerprint): a chave pública não está em *Deploy keys* do `dialetto`, ou está em outro repositório.
 - **`build.gradle no longer reads GITHUB_RUN_NUMBER`**: o app mudou a forma de ler o `versionCode`; ajuste o passo "Point versionCode at the build number" em `_android-apk.yml`.
 - **TestFlight recusa o build por número repetido ou menor**: aumente `BUILD_NUMBER_OFFSET`.

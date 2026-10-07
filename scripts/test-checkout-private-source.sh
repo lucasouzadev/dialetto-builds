@@ -60,12 +60,45 @@ check "a tag as ref"                      0 "Source commit: ${head_sha:0:7}" DEP
 check "a full commit sha as ref"          0 "Source commit: ${head_sha:0:7}" DEPLOY_KEY="$key_clean" REF="$head_sha"
 
 check "the PUBLIC key by mistake"         1 "holds the PUBLIC key"           DEPLOY_KEY="$(cat good.pub)"
-check "a GitHub token by mistake"         1 "GitHub token"                   DEPLOY_KEY="ghp_abcdefghijklmnopqrstuvwxyz0123456789"
 check "a key with a passphrase"           1 "passphrase"                     DEPLOY_KEY="$(cat locked)"
 check "garbage"                           1 "does not start with a private-key header" DEPLOY_KEY="hello world"
 check "a truncated key"                   1 "cannot parse"                   DEPLOY_KEY="$(head -n 3 good)"
 check "an unknown ref"                    1 "failed"                         DEPLOY_KEY="$key_clean" REF=does-not-exist
 check "a ref with shell characters"       1 "characters a branch"            DEPLOY_KEY="$key_clean" REF='main;rm -rf /'
+
+# --- GitHub token mode, against a stub of the GitHub API ----------------------
+cat > stub_api.py <<'PY'
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        tok = self.headers.get("Authorization", "").replace("Bearer ", "")
+        table = {
+            "github_pat_readonly": (200, {"permissions": {"pull": True, "push": False}}),
+            "github_pat_writer": (200, {"permissions": {"pull": True, "push": True}}),
+            "github_pat_admin": (200, {"permissions": {"pull": True, "admin": True}}),
+            "github_pat_expired": (401, {"message": "Bad credentials"}),
+            "github_pat_noaccess": (404, {"message": "Not Found"}),
+        }
+        code, body = table.get(tok, (500, {}))
+        data = json.dumps(body).encode()
+        self.send_response(code); self.send_header("Content-Length", str(len(data))); self.end_headers()
+        self.wfile.write(data)
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+print(s.server_port, flush=True)
+s.serve_forever()
+PY
+python3 stub_api.py > stub_port &
+stub_pid=$!
+for _ in $(seq 1 50); do [ -s stub_port ] && break; sleep 0.1; done
+api="http://127.0.0.1:$(cat stub_port)"
+check "a read-only token"                 0 "can write: no"                  DEPLOY_KEY="github_pat_readonly" API_BASE="$api"
+check "a token that can push"             1 "can WRITE"                      DEPLOY_KEY="github_pat_writer" API_BASE="$api"
+check "a token with admin"                1 "can WRITE"                      DEPLOY_KEY="github_pat_admin" API_BASE="$api"
+check "an expired token"                  1 "rejected the token"             DEPLOY_KEY="github_pat_expired" API_BASE="$api"
+check "a token without access"            1 "cannot see"                     DEPLOY_KEY="github_pat_noaccess" API_BASE="$api"
+check "a classic token warns"             1 "Classic token"                  DEPLOY_KEY="ghp_unknowntoken" API_BASE="$api"
+kill "$stub_pid" 2>/dev/null
 
 # The key file must not outlive the run.
 if compgen -G "${TMPDIR:-/tmp}/tmp.*/id" > /dev/null; then
