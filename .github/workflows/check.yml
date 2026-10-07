@@ -51,6 +51,7 @@ jobs:
       - name: Shell and Python syntax
         run: |
           for f in e2e/*.sh; do bash -n "$f"; done
+          shellcheck e2e/*.sh
           python3 -m py_compile e2e/summarize.py scripts/ota_verify.py
 
   flows:
