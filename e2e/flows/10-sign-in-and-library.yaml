@@ -1,0 +1,18 @@
+# Signs in with the E2E account and walks the library tabs.
+appId: club.dialetto.app
+name: Sign in and browse the library tabs
+tags:
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- takeScreenshot: 10-library-workbench
+- tapOn: "Folders|Pastas"
+- takeScreenshot: 11-library-folders
+- tapOn: "Tracks|Faixas"
+- takeScreenshot: 12-library-tracks
+- tapOn: "Shared|Compartilhados"
+- takeScreenshot: 13-library-shared

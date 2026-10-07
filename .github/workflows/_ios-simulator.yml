@@ -1,0 +1,76 @@
+name: _iOS simulator app (reusable)
+
+# Compiles the iOS project for the simulator (unsigned) and uploads the .app so
+# the E2E workflow can install it. Proves the shell builds; it is NOT an
+# installable device build (that is ios-testflight in build.yml).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lucasouzadev/dialetto
+        type: string
+        default: main
+      artifact_name:
+        type: string
+        default: dialetto-ios-simulator-app
+      artifact_days:
+        type: number
+        default: 3
+
+permissions:
+  contents: read
+
+env:
+  VITE_SUPABASE_URL: https://ohcgrtaultutxmcpoicl.supabase.co
+  VITE_SUPABASE_ANON_KEY: sb_publishable_y8X6t-Es_w8D5d4a6qy84g_fP5ClLKp
+  VITE_WORKER_URL: https://dialetto-worker.fly.dev
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ inputs.ref }}
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - uses: ./.github/actions/setup-web
+
+      - name: Build the web bundle and sync it into ios/
+        working-directory: src/frontend
+        run: bun run cap:sync
+
+      - name: Compile for the iOS Simulator (unsigned)
+        working-directory: src/frontend
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/derived" \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet
+
+      # ditto keeps symlinks and bundle metadata that a plain zip would break.
+      - name: Package the .app
+        run: |
+          app="$RUNNER_TEMP/derived/Build/Products/Debug-iphonesimulator/App.app"
+          test -d "$app" || { echo "::error::App.app was not produced"; exit 1; }
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/App.app.zip"
+          echo "App.app: $(du -sh "$app" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/App.app.zip
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact_days }}

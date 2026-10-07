@@ -1,0 +1,151 @@
+name: _Android APK (reusable)
+
+# Builds the debug APK from the private Dialetto source and uploads it as an
+# artifact. Called by build.yml (which can also publish it as a Release) and by
+# e2e-android.yml. Not meant to be run on its own.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lucasouzadev/dialetto
+        type: string
+        default: main
+      artifact_name:
+        type: string
+        default: dialetto-android-debug-apk
+      artifact_days:
+        type: number
+        default: 14
+    outputs:
+      build_number:
+        description: Build number baked into the APK (versionCode)
+        value: ${{ jobs.apk.outputs.build_number }}
+      source_short:
+        description: Short sha of the source commit
+        value: ${{ jobs.apk.outputs.source_short }}
+
+permissions:
+  contents: read
+
+env:
+  # Public by design: the same values the web bundle ships. No secret goes here.
+  VITE_SUPABASE_URL: https://ohcgrtaultutxmcpoicl.supabase.co
+  VITE_SUPABASE_ANON_KEY: sb_publishable_y8X6t-Es_w8D5d4a6qy84g_fP5ClLKp
+  VITE_WORKER_URL: https://dialetto-worker.fly.dev
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      build_number: ${{ steps.num.outputs.build_number }}
+      source_short: ${{ steps.src.outputs.short }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the private source
+        id: src
+        uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ inputs.ref }}
+
+      # The repository this runs in is new, so github.run_number started again
+      # at 1 -- but TestFlight and every installed Android already saw build
+      # numbers past 50, and neither accepts a lower one. The offset keeps the
+      # number rising. Set the repository variable BUILD_NUMBER_OFFSET to change it.
+      - name: Compute the build number
+        id: num
+        env:
+          OFFSET: ${{ vars.BUILD_NUMBER_OFFSET || '100' }}
+        run: |
+          if ! [[ "$OFFSET" =~ ^[0-9]+$ ]]; then
+            echo "::error::BUILD_NUMBER_OFFSET must be a whole number (got '$OFFSET')."
+            exit 1
+          fi
+          n=$(( OFFSET + GITHUB_RUN_NUMBER ))
+          echo "build_number=$n" >> "$GITHUB_OUTPUT"
+          echo "DIALETTO_BUILD_NUMBER=$n" >> "$GITHUB_ENV"
+          echo "Build number: $n (offset $OFFSET + run $GITHUB_RUN_NUMBER)"
+
+      # android/app/build.gradle reads its versionCode from GITHUB_RUN_NUMBER,
+      # which GitHub does not let a workflow override. Point it at the number
+      # above in this working copy only. If the line ever changes, fail loudly
+      # instead of silently shipping the wrong number.
+      - name: Point versionCode at the build number
+        run: |
+          f=src/frontend/android/app/build.gradle
+          if ! grep -q 'System.getenv("GITHUB_RUN_NUMBER")' "$f"; then
+            echo "::error::build.gradle no longer reads GITHUB_RUN_NUMBER; update this patch."
+            exit 1
+          fi
+          sed -i 's/System\.getenv("GITHUB_RUN_NUMBER")/System.getenv("DIALETTO_BUILD_NUMBER")/' "$f"
+          grep -n 'DIALETTO_BUILD_NUMBER' "$f"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: ./.github/actions/setup-web
+
+      - name: Build the web bundle and sync it into android/
+        working-directory: src/frontend
+        run: bun run cap:sync
+
+      # Optional fixed signing key. Without it the APK is signed with the
+      # runner's throwaway debug key, which changes on every run -- Android
+      # App Links verify against ONE certificate, and an installed app can only
+      # be updated by an APK signed with the same key.
+      - name: Prepare the fixed signing key
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dialetto.keystore"
+            echo "DIALETTO_KEYSTORE_PATH=$RUNNER_TEMP/dialetto.keystore" >> "$GITHUB_ENV"
+            echo "fixed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "fixed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with the throwaway debug key."
+          fi
+
+      - name: Assemble the debug APK
+        working-directory: src/frontend/android
+        env:
+          DIALETTO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          DIALETTO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          DIALETTO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleDebug --no-daemon --console=plain
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/dialetto.keystore"
+
+      # The certificate fingerprint is public; it is the value assetlinks.json needs.
+      - name: Summarise the APK
+        env:
+          FIXED: ${{ steps.signing.outputs.fixed }}
+          BUILD: ${{ steps.num.outputs.build_number }}
+          SHORT: ${{ steps.src.outputs.short }}
+        run: |
+          apk=src/frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort | tail -n 1)
+          cert=$("$APKSIGNER" verify --print-certs "$apk" | grep -i "SHA-256" | head -1)
+          {
+            echo "### Android APK"
+            echo "- Build number: **${BUILD}**"
+            echo "- Source commit: \`${SHORT}\`"
+            echo "- Fixed signing key: **${FIXED}**"
+            echo "- ${cert}"
+            echo "- APK sha256: \`$(sha256sum "$apk" | cut -d' ' -f1)\`"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: src/frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact_days }}

@@ -1,0 +1,46 @@
+name: Checkout the private Dialetto source
+description: >
+  Clones lucasouzadev/dialetto (private) into ./src with a read-only deploy key.
+  Call actions/checkout for THIS repository first (the local actions and the
+  e2e flows live here), then this step.
+
+inputs:
+  ssh-key:
+    description: Private half of the read-only deploy key (secret DIALETTO_DEPLOY_KEY).
+    required: true
+  ref:
+    description: Branch, tag or commit of the private repository to build.
+    required: false
+    default: main
+
+outputs:
+  sha:
+    description: Full commit sha that was checked out.
+    value: ${{ steps.sha.outputs.sha }}
+  short:
+    description: First 7 characters of the commit sha.
+    value: ${{ steps.sha.outputs.short }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check out the source
+      uses: actions/checkout@v4
+      with:
+        repository: lucasouzadev/dialetto
+        ref: ${{ inputs.ref }}
+        ssh-key: ${{ inputs.ssh-key }}
+        path: src
+        fetch-depth: 1
+        persist-credentials: false
+
+    # Only the hash is ever printed: this repository is public, so its logs are
+    # too, and a private commit message does not belong in them.
+    - name: Record which commit this is
+      id: sha
+      shell: bash
+      run: |
+        sha="$(git -C src rev-parse HEAD)"
+        echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+        echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
+        echo "Source commit: ${sha:0:7}"

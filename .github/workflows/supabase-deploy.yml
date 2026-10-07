@@ -1,0 +1,106 @@
+name: Supabase deploy
+
+# Manual: Actions -> "Supabase deploy" -> Run workflow.
+#
+# Applies pending SQL migrations and deploys the Edge Functions from the private
+# source repo, with the same script it used to run there
+# (supabase/scripts/ci-deploy.sh): repairs history drift, marks the known
+# MCP-era migrations as applied, `db push --yes --include-all`, then
+# `functions deploy`. Nothing here is automatic: a merge in the private repo
+# does NOT deploy until you run this.
+#
+# The repository is public, so this run's log is public. The script prints
+# migration file names and, when a migration fails, can print part of its SQL.
+# Run a dry run first, and treat a failure log as something others can read.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lucasouzadev/dialetto
+        type: string
+        default: main
+      deploy_migrations:
+        description: Apply pending SQL migrations (supabase db push)
+        type: boolean
+        default: true
+      deploy_functions:
+        description: Deploy the Edge Functions under supabase/functions
+        type: boolean
+        default: true
+      dry_run:
+        description: Migrations only -- print what would be applied, write nothing
+        type: boolean
+        default: false
+      sync_history:
+        description: Align remote/local migration history before the push
+        type: boolean
+        default: true
+      include_all:
+        description: Pass --include-all (out-of-order local migrations)
+        type: boolean
+        default: true
+      mark_applied:
+        description: "Escape hatch: comma-separated local versions to force-mark as applied"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Add yourself as a required reviewer on this Environment (Settings ->
+    # Environments -> production) to make every deploy wait for your approval.
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      DEPLOY_MIGRATIONS: ${{ inputs.deploy_migrations }}
+      DEPLOY_FUNCTIONS: ${{ inputs.deploy_functions }}
+      SYNC_HISTORY: ${{ inputs.sync_history }}
+      INCLUDE_ALL: ${{ inputs.include_all }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      MARK_APPLIED: ${{ inputs.mark_applied }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the private source
+        id: src
+        uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: latest
+
+      - name: Verify secrets
+        run: |
+          missing=0
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing secret::$name is not set (Settings -> Secrets and variables -> Actions)."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          echo "Source commit: ${{ steps.src.outputs.short }}"
+          echo "Migrations:    $DEPLOY_MIGRATIONS (dry run: $DRY_RUN)"
+          echo "Functions:     $DEPLOY_FUNCTIONS"
+          echo "Sync history:  $SYNC_HISTORY   Include all: $INCLUDE_ALL"
+          [ -z "${MARK_APPLIED:-}" ] || echo "Mark applied:  $MARK_APPLIED"
+
+      - name: Deploy (sync, push, functions)
+        working-directory: src
+        run: bash supabase/scripts/ci-deploy.sh

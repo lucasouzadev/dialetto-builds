@@ -1,0 +1,9 @@
+# The cookie/storage notice can sit over the first screen of a fresh install.
+# Taps it away when it is there, does nothing when it is not.
+appId: club.dialetto.app
+---
+- runFlow:
+    when:
+      visible: "Continue|Continuar"
+    commands:
+      - tapOn: "Continue|Continuar"

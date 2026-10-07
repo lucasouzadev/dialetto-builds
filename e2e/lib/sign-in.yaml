@@ -1,0 +1,18 @@
+# Signs in with the E2E account. Expects the app to be on its sign-in screen
+# and the variables EMAIL and PASSWORD (passed with `maestro test -e`).
+# The field labels are the visible ones: "email" and "password".
+appId: club.dialetto.app
+---
+- extendedWaitUntil:
+    visible: "Sign in|Entrar"
+    timeout: 60000
+- runFlow: dismiss-consent.yaml
+- tapOn: "email"
+- inputText: ${EMAIL}
+- tapOn: "password"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn: "Sign in|Entrar"
+- extendedWaitUntil:
+    visible: "Workbench|Bancada"
+    timeout: 60000

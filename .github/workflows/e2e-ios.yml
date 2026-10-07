@@ -1,0 +1,75 @@
+name: E2E (iOS simulator)
+
+# Builds the app for the iOS Simulator (unsigned), boots an iPhone simulator,
+# installs it and runs the Maestro flows in e2e/flows. The report, a screen
+# recording, screenshots and the final screen are uploaded as the
+# "e2e-ios-output" artifact, and the job summary lists each flow.
+#
+# The simulator cannot receive real push notifications, so push is checked on
+# Android and on a real device, not here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lucasouzadev/dialetto to test
+        type: string
+        default: main
+      tags:
+        description: "Only run flows with these Maestro tags (comma separated, e.g. smoke). Empty = all."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-ios
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_ios-simulator.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: e2e-ios-app
+      artifact_days: 2
+    secrets: inherit
+
+  test:
+    name: Run the flows on a simulator
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-ios-app
+          path: app
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: ./.github/actions/install-maestro
+
+      - name: Run the flows
+        env:
+          APP_ZIP: app/App.app.zip
+          E2E_OUT: e2e-output
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          E2E_TAGS: ${{ inputs.tags }}
+        run: bash e2e/run-ios.sh
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ios-output
+          path: e2e-output
+          if-no-files-found: warn
+          retention-days: 7

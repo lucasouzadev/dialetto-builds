@@ -1,0 +1,48 @@
+name: Install Maestro
+description: >
+  Maestro is the tool that drives the app in the E2E workflows. Pinned to one
+  release and verified against its sha256 before it is unpacked, so a changed
+  or tampered download fails the run instead of running on the runner.
+
+inputs:
+  version:
+    description: Maestro CLI release (the GitHub tag is cli-<version>).
+    required: false
+    default: "2.11.0"
+  sha256:
+    description: sha256 of that release's maestro.zip.
+    required: false
+    default: "5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a"
+
+runs:
+  using: composite
+  steps:
+    # The archive is ~315 MB; cached by version + checksum so it is fetched
+    # once, not on every run.
+    - name: Restore Maestro
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.maestro-dist
+        key: maestro-${{ inputs.version }}-${{ inputs.sha256 }}
+
+    - name: Download and verify Maestro
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.maestro-dist"
+        curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+          "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${VERSION}/maestro.zip"
+        echo "${SHA256}  ${RUNNER_TEMP}/maestro.zip" | shasum -a 256 -c -
+        unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-dist"
+        rm -f "$RUNNER_TEMP/maestro.zip"
+
+    - name: Put Maestro on the PATH
+      shell: bash
+      run: |
+        echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
+        echo "MAESTRO_CLI_NO_ANALYTICS=1" >> "$GITHUB_ENV"

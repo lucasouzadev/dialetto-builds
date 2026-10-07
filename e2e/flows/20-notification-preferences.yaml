@@ -1,0 +1,22 @@
+# Opens the notification preferences from the profile and checks the screen
+# that was redesigned: the device card and every category, "What's new" included.
+# Nothing is switched on or off here -- this account is a real one in production.
+appId: club.dialetto.app
+name: Notification preferences screen
+tags:
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Account|Conta"
+- tapOn: "View profile|Ver perfil"
+- scrollUntilVisible:
+    element: "Notifications|Notificações"
+    timeout: 20000
+- tapOn: "Notifications|Notificações"
+- assertVisible: "What to notify you about|O que avisar"
+- assertVisible: "What's new|Novidades"
+- takeScreenshot: 20-notification-preferences

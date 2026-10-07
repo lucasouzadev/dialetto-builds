@@ -1,0 +1,89 @@
+name: OTA (verify / redeploy)
+
+# The over-the-air bundle is built by the Vercel deploy of the site, not here:
+# every production deploy also publishes /ota/latest.json and the zip it points
+# at, and the installed apps only accept them from dialetto.club. So an OTA is
+# "main, deployed on Vercel". This workflow checks that and, if you ask, kicks
+# the deploy.
+#
+#   verify    Reads what is live and checks it against the source commit: same
+#             version, zip checksum equals the manifest's, minNativeBuild equals
+#             frontend/ota.config.json. Needs no Vercel access.
+#   redeploy  POSTs the Vercel Deploy Hook (secret VERCEL_DEPLOY_HOOK_URL) and
+#             waits until the live manifest is the commit you asked for. Only
+#             for `main`: the hook deploys the production branch, nothing else.
+#             Vercel's own Git integration normally deploys on every merge by
+#             itself -- this is for when that did not happen.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        type: choice
+        default: verify
+        options:
+          - verify
+          - redeploy
+      ref:
+        description: Commit of lucasouzadev/dialetto to compare with (redeploy requires main)
+        type: string
+        default: main
+      wait_minutes:
+        description: redeploy only -- how long to wait for the new OTA to go live
+        type: number
+        default: 15
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota
+  cancel-in-progress: false
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the private source
+        id: src
+        uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ inputs.ref }}
+
+      - name: Verify what is live
+        if: inputs.action == 'verify'
+        env:
+          SHA: ${{ steps.src.outputs.sha }}
+        run: python3 scripts/ota_verify.py --sha "$SHA" --ota-config src/frontend/ota.config.json
+
+      - name: Ask Vercel to deploy main
+        if: inputs.action == 'redeploy'
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          REF: ${{ inputs.ref }}
+        run: |
+          if [ "$REF" != "main" ]; then
+            echo "::error::redeploy only works for main (the deploy hook builds the production branch)."
+            exit 1
+          fi
+          if [ -z "$HOOK" ]; then
+            echo "::error title=Missing secret::VERCEL_DEPLOY_HOOK_URL is not set (Vercel -> Project -> Settings -> Git -> Deploy Hooks)."
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Deploy requested for main (${{ steps.src.outputs.short }})."
+
+      - name: Wait for the new OTA to go live
+        if: inputs.action == 'redeploy'
+        env:
+          SHA: ${{ steps.src.outputs.sha }}
+          WAIT_MINUTES: ${{ inputs.wait_minutes }}
+        run: |
+          python3 scripts/ota_verify.py --sha "$SHA" \
+            --ota-config src/frontend/ota.config.json \
+            --wait "$(( WAIT_MINUTES * 60 ))" --strict

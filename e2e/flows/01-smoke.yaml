@@ -1,0 +1,17 @@
+# The app starts, loads its bundle and shows the sign-in screen. Needs no account.
+appId: club.dialetto.app
+name: App opens on the sign-in screen
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in|Entrar"
+    timeout: 60000
+- runFlow: ../lib/dismiss-consent.yaml
+- assertVisible: "email"
+- assertVisible: "password"
+- takeScreenshot: 01-sign-in-screen

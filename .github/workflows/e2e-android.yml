@@ -1,0 +1,91 @@
+name: E2E (Android emulator)
+
+# Builds the debug APK, boots an Android emulator, installs it and runs the
+# Maestro flows in e2e/flows. The report, a log, screenshots and the final
+# screen are uploaded as the "e2e-android-output" artifact, and the job summary
+# lists each flow -- so a failure can be diagnosed without anyone holding a phone.
+#
+# The flows tagged "login" need a dedicated test account (secrets E2E_EMAIL and
+# E2E_PASSWORD); without them only the no-account flows run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of lucasouzadev/dialetto to test
+        type: string
+        default: main
+      tags:
+        description: "Only run flows with these Maestro tags (comma separated, e.g. smoke). Empty = all."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-android
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_android-apk.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: e2e-android-apk
+      artifact_days: 2
+    secrets: inherit
+
+  test:
+    name: Run the flows on an emulator
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-android-apk
+          path: apk
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: ./.github/actions/install-maestro
+
+      # Hardware acceleration for the emulator (standard runners expose /dev/kvm
+      # but not to the runner user).
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the flows
+        uses: reactivecircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
+        env:
+          APK_PATH: apk/app-debug.apk
+          E2E_OUT: e2e-output
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          E2E_TAGS: ${{ inputs.tags }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash e2e/run-android.sh
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-android-output
+          path: e2e-output
+          if-no-files-found: warn
+          retention-days: 7
