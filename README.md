@@ -103,6 +103,10 @@ O repositório é público, então estes ajustes importam:
 
 ## Cuidados com o que é público
 - **Os logs são públicos.** Um build ou deploy pode imprimir nomes de arquivo, trechos de código numa mensagem de erro, nomes de migrations e, quando uma migration falha, parte do SQL. Rode `dry_run` no deploy do Supabase antes e trate um log de falha como legível por qualquer pessoa.
+- **Artefatos e logs deste repositório são públicos** (qualquer conta do GitHub baixa um artefato). O GitHub mascara segredos só no **log**, nunca dentro de um arquivo: por isso o `e2e/scrub_artifacts.py` limpa a senha da conta E2E e tokens de sessão de todo arquivo de texto antes do upload, e apaga imagem/vídeo que contenha a senha. O vídeo e as capturas do iOS/Android mostram a tela do app: **use uma conta E2E dedicada, sem dado real e com senha que só serve para isso** (nunca a conta de uso).
+- **O APK publicado é um build de debug (`debuggable`) assinado com a chave fixa** quando `ANDROID_KEYSTORE_BASE64` existe. Se essa for a mesma chave de uma loja, esse APK público pode atualizar ou substituir o app real em quem o instalar: use uma chave separada para builds públicos. Por isso `publish_release` exige marcar `public_release_ack`.
+- **`DIALETTO_DEPLOY_KEY`**: prefira uma deploy key SSH somente leitura. Um token (PAT) funciona, mas o script não consegue provar que ele só lê (o GitHub não informa os escopos de um token); se usar, que seja fine-grained, só deste repositório, com Contents: read-only.
+- **Ações de terceiros por tag, não por SHA** (exceto `android-emulator-runner`). Fixar por SHA (ex.: `pinact` ou Dependabot) é um passo pendente.
 - **A Release é pública.** O APK contém o bundle (o mesmo que o site já serve, sem sourcemaps), o shell nativo, o `google-services.json` e a chave publicável do Supabase: nada secreto. Publique **só o APK**, nunca iOS, keystore ou `.p8`. A descrição da Release leva só o número do build, o hash curto do commit e o checksum.
 - O APK é de **debug** e é assinado com a chave fixa: é para testar, não é uma release oficial.
 

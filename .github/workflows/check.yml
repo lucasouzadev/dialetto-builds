@@ -52,7 +52,12 @@ jobs:
         run: |
           for f in e2e/*.sh scripts/*.sh; do bash -n "$f"; done
           shellcheck e2e/*.sh scripts/*.sh
-          python3 -m py_compile e2e/summarize.py scripts/ota_verify.py
+          python3 -m py_compile e2e/summarize.py e2e/scrub_artifacts.py scripts/ota_verify.py
+
+      # Artifacts are public: prove the scrubber really removes the test
+      # account's credentials and tokens (made-up values only).
+      - name: Test the artifact scrubber
+        run: bash scripts/test-scrub-artifacts.sh
 
       # The deploy-key secret arrives damaged more often than it should
       # (CRLF, a lost final newline). This proves every repairable case is
