@@ -33,6 +33,10 @@ on:
         description: Android only -- publish the APK as a GitHub pre-release
         type: boolean
         default: false
+      public_release_ack:
+        description: Needed with publish_release. I know a Release is PUBLIC (anyone can download it) and this APK is a debuggable build, signed with the fixed key when that secret is set.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -49,9 +53,21 @@ jobs:
       ref: ${{ inputs.ref }}
     secrets: inherit
 
+  # Publishing puts a debuggable APK in front of the whole internet, signed with
+  # the fixed key if ANDROID_KEYSTORE_BASE64 is set. Make that a deliberate act.
+  release-ack-check:
+    name: Confirm the public release
+    if: inputs.publish_release && !inputs.public_release_ack
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "::error title=Public release not confirmed::publish_release makes the APK downloadable by anyone, and it is a debuggable build (signed with the fixed key when that secret exists). Tick public_release_ack to confirm, or untick publish_release and use the run's Artifacts."
+          exit 1
+
   release-apk:
     name: Publish the APK as a pre-release
-    if: inputs.publish_release && (inputs.target == 'android-apk' || inputs.target == 'android-and-ios-check')
+    if: inputs.publish_release && inputs.public_release_ack && (inputs.target == 'android-apk' || inputs.target == 'android-and-ios-check')
     needs: android-apk
     runs-on: ubuntu-latest
     timeout-minutes: 10

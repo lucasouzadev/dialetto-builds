@@ -117,6 +117,14 @@ check "a classic token is refused"        1 "not supported"                  DEP
 check "an OAuth token is refused"         1 "not supported"                  DEPLOY_KEY="gho_unknowntoken" API_BASE="$api"
 kill "$stub_pid" 2>/dev/null
 
+# A malformed secret must not be echoed, not even a prefix: the log is public.
+leak_out="$(env DEPLOY_KEY="zq9wx-not-a-key" REMOTE_URL="$work/remote.git" DEST="$work/out" bash "$script" 2>&1)"
+if grep -qF "zq9" <<<"$leak_out"; then
+  failed=$((failed + 1)); echo "FAIL - a malformed secret leaked a prefix into the log"
+else
+  passed=$((passed + 1)); echo "ok   - a malformed secret leaks no prefix into the log"
+fi
+
 # The key file must not outlive the run.
 if compgen -G "${TMPDIR:-/tmp}/tmp.*/id" > /dev/null; then
   echo "note: a key file may remain under ${TMPDIR:-/tmp} (check manually)"

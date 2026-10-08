@@ -69,7 +69,8 @@ case "$first" in
   ghp_*|github_pat_*|gho_*|ghs_*) mode=token ;;
   "-----BEGIN OPENSSH PRIVATE KEY-----"|"-----BEGIN RSA PRIVATE KEY-----"|"-----BEGIN EC PRIVATE KEY-----") mode=ssh ;;
   *)
-    fail "DIALETTO_DEPLOY_KEY does not start with a private-key header or a GitHub token (it starts with '${first:0:5}...'). Paste the whole key file, from the BEGIN line to the END line, or its base64." ;;
+    # Never echo any part of the value: this log is public.
+    fail "DIALETTO_DEPLOY_KEY does not start with a private-key header or a GitHub token. Paste the whole key file, from the BEGIN line to the END line, or its base64." ;;
 esac
 
 if [ "$mode" = token ]; then
@@ -81,6 +82,7 @@ if [ "$mode" = token ]; then
     *)            kind="other" ;;
   esac
   echo "Credential: a GitHub token ($kind)."
+  echo "::warning title=Token as deploy credential::A token is not limited to read access by this script (GitHub does not report a token's scopes). Prefer a read-only SSH deploy key for $REPO; if you keep the token, make it fine-grained, for that repository only, with Contents: read-only."
   if [ "$kind" != fine-grained ]; then
     fail "Use a fine-grained token limited to $REPO with Contents: read-only, or a read-only SSH deploy key. Classic and other token types are not supported."
   fi

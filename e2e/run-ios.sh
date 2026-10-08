@@ -68,5 +68,9 @@ set -e
 xcrun simctl io "$udid" screenshot "$OUT/final-screen.png" || true
 kill -INT "$video_pid" 2>/dev/null || true
 wait "$video_pid" 2>/dev/null || true
+# This repository is public and so are its artifacts: GitHub masks secrets in
+# logs only. Strip the test account's credentials and tokens from every file
+# first (and drop any screenshot/video that contains them).
+python3 -I e2e/scrub_artifacts.py "$OUT" || true
 python3 e2e/summarize.py "$OUT/report.xml" "iOS" || true
 exit "$code"

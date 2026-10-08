@@ -41,5 +41,9 @@ set -e
 
 adb logcat -d -v time > "$OUT/logcat.txt" || true
 adb exec-out screencap -p > "$OUT/final-screen.png" || true
+# This repository is public and so are its artifacts: GitHub masks secrets in
+# logs only. Strip the test account's credentials and tokens from every file
+# first (and drop any screenshot/video that contains them).
+python3 -I e2e/scrub_artifacts.py "$OUT" || true
 python3 e2e/summarize.py "$OUT/report.xml" "Android" || true
 exit "$code"
