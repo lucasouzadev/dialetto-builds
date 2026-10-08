@@ -13,10 +13,11 @@
 #   DEPLOY_KEY   the secret (required). Either
 #                - an SSH private key (a read-only deploy key), as the file's text
 #                  or as base64 of the file -- the recommended form; or
-#                - a GitHub token (fine-grained `github_pat_...` or classic
-#                  `ghp_...`). A token is checked against the GitHub API first
-#                  and REFUSED if it can write to the repository, because this
-#                  workflow only ever needs to read.
+#                - a fine-grained GitHub token (`github_pat_...`), configured
+#                  for this repository only with Contents: read-only. The API
+#                  checks visibility and Contents read access, not token scopes:
+#                  repository permissions describe the user's role, not the
+#                  token's effective permissions. Classic tokens are refused.
 #   REF          branch, tag or full commit sha (default main)
 #   REPO         owner/name (default lucasouzadev/dialetto)
 #   DEST         where to clone (default src)
@@ -72,7 +73,7 @@ case "$first" in
 esac
 
 if [ "$mode" = token ]; then
-  # --- 3a. A GitHub token: use it only if it can READ and cannot WRITE -------
+  # --- 3a. A fine-grained token: verify repository and Contents read access --
   token="$(tr -d '[:space:]' < "$key")"
   case "$token" in
     github_pat_*) kind="fine-grained" ;;
@@ -80,8 +81,8 @@ if [ "$mode" = token ]; then
     *)            kind="other" ;;
   esac
   echo "Credential: a GitHub token ($kind)."
-  if [ "$kind" = classic ]; then
-    echo "::warning title=Classic token::A classic token (ghp_...) reaches EVERY repository of its owner. Prefer a fine-grained token limited to $REPO with Contents: read-only, or an SSH deploy key."
+  if [ "$kind" != fine-grained ]; then
+    fail "Use a fine-grained token limited to $REPO with Contents: read-only, or a read-only SSH deploy key. Classic and other token types are not supported."
   fi
   api="${API_BASE:-https://api.github.com}"
   status="$(curl -sS -m 20 -o "$dir/repo.json" -w '%{http_code}' \
@@ -93,15 +94,20 @@ if [ "$mode" = token ]; then
     403|404) fail "The token cannot see $REPO. A fine-grained token must list that repository and have Contents: read." ;;
     *) fail "Unexpected answer ($status) from the GitHub API while checking the token." ;;
   esac
-  can_write="$(python3 -I -c '
-import json, sys
-perms = json.load(open(sys.argv[1])).get("permissions") or {}
-print("yes" if perms.get("push") or perms.get("admin") or perms.get("maintain") else "no")
-' "$dir/repo.json")"
-  echo "Token check: can read $REPO: yes; can write: $can_write"
-  if [ "$can_write" = yes ]; then
-    fail "This token can WRITE to $REPO, and this workflow only needs to read. Use a fine-grained token with Contents: read-only, or an SSH deploy key (read-only)."
-  fi
+  # GET /repos only requires Metadata: read. Checking Contents separately
+  # catches a token that can see the repository but cannot fetch its code.
+  # Never probe write endpoints to discover a token's scope.
+  status="$(curl -sS -m 20 -o "$dir/commits.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" \
+    "$api/repos/$REPO/commits?per_page=1" 2>/dev/null)" || fail "Could not reach the GitHub API to check Contents read access."
+  case "$status" in
+    200) ;;
+    401) fail "GitHub rejected the token (expired or revoked). Create a new one." ;;
+    403|404) fail "The token cannot read the source of $REPO. Grant Contents: read-only for that repository." ;;
+    *) fail "Unexpected answer ($status) from the GitHub API while checking Contents read access." ;;
+  esac
+  echo "Token check: repository visibility and Contents read access verified."
+  echo "Token scopes are configured in GitHub: use only $REPO with Contents: read-only. Repository role permissions do not prove token write access."
   header="$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
   export GIT_CONFIG_COUNT=1
   export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
