@@ -7,7 +7,7 @@ description: >
 
 inputs:
   ssh-key:
-    description: Private half of the read-only deploy key, or a read-only fine-grained GitHub token (secret DIALETTO_DEPLOY_KEY). A token that can write is refused.
+    description: Private half of a read-only deploy key, or a fine-grained GitHub token restricted to Dialetto with Contents read-only (secret DIALETTO_DEPLOY_KEY). Token scopes must be configured in GitHub.
     required: true
   ref:
     description: Branch, tag or full commit sha of the private repository to build.
