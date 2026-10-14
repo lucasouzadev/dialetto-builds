@@ -26,6 +26,7 @@ jobs:
       - name: Validate syntax and install isolated browser
         run: |
           set -euo pipefail
+          node scripts/check-public-ux-safety.mjs
           node --check scripts/public-ux-probe.mjs
           npm install --prefix "$RUNNER_TEMP/public-ux" --no-package-lock --no-save --ignore-scripts playwright@1.56.1
           node "$RUNNER_TEMP/public-ux/node_modules/playwright/cli.js" install --with-deps chromium
