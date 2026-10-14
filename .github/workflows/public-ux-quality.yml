@@ -1,0 +1,40 @@
+name: Public UX QA (no private checkout, no artifacts)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * *'
+  pull_request:
+    paths:
+      - 'scripts/public-ux-probe.mjs'
+      - '.github/workflows/public-ux-quality.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-responsive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax and install isolated browser
+        run: |
+          set -euo pipefail
+          node scripts/check-public-ux-safety.mjs
+          node --check scripts/public-ux-probe.mjs
+          npm install --prefix "$RUNNER_TEMP/public-ux" --no-package-lock --no-save --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/public-ux/node_modules/playwright/cli.js" install --with-deps chromium
+          ln -s "$RUNNER_TEMP/public-ux/node_modules" scripts/node_modules
+      - name: Test public unauthenticated Dialetto layout
+        run: node scripts/public-ux-probe.mjs
+      - name: Explain scope
+        if: always()
+        run: |
+          echo 'Checks live PUBLIC login/signup responsiveness only; uses no secrets, credentials, private checkout or artifacts.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This is NOT a private-commit PR gate, nor does it certify Capacitor safe areas, security, real data or visual design.' >> "$GITHUB_STEP_SUMMARY"
