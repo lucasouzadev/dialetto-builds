@@ -21,6 +21,8 @@
 #   REF          branch, tag or full commit sha (default main)
 #   REPO         owner/name (default lucasouzadev/dialetto)
 #   DEST         where to clone (default src)
+#   LIST_HEADS   "1": do not clone; write "<sha> <branch>" per branch to HEAD_LIST_FILE
+#   HEAD_LIST_FILE  output file for LIST_HEADS
 #   REMOTE_URL   override the remote (tests only)
 #   API_BASE     override https://api.github.com (tests only)
 # Writes `sha` and `short` to $GITHUB_OUTPUT when it is set.
@@ -139,6 +141,14 @@ fi
 if [ "$mode" = ssh ]; then
   echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$dir/known_hosts"
   export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$dir/known_hosts -o HostKeyAlgorithms=ssh-ed25519"
+fi
+if [ "${LIST_HEADS:-}" = 1 ]; then
+  : "${HEAD_LIST_FILE:?HEAD_LIST_FILE is required with LIST_HEADS=1}"
+  git ls-remote --heads "$REMOTE_URL" 2>/dev/null \
+    | sed -E 's#^([0-9a-f]{40})[[:space:]]+refs/heads/(.+)$#\1 \2#' > "$HEAD_LIST_FILE" \
+    || fail "git ls-remote failed for $REPO."
+  echo "Listed $(wc -l < "$HEAD_LIST_FILE" | tr -d ' ') branches (names are not printed: this log is public)."
+  exit 0
 fi
 rm -rf "$DEST"
 git init -q "$DEST"
