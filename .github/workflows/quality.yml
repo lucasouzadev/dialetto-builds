@@ -1,0 +1,280 @@
+name: Quality (frontend, backend, responsive)
+
+# The private repository ran these gates itself until its Actions quota ran
+# out. Public repositories do not spend minutes, so they run here, against a
+# read-only clone of the private source.
+#
+# Triggers: every 15 minutes (tests each private branch whose head changed
+# since the last run) and manual. NEVER pull_request / pull_request_target:
+# a fork must not be able to run code next to the deploy key.
+#
+# This repository is public, so its logs are too: output goes through
+# scripts/quiet-run.sh (counts and failing names only), nothing is uploaded as
+# an artifact, and the only secret, DIALETTO_DEPLOY_KEY (read-only), is used by
+# the clone step alone and is not in the environment of any step that runs
+# project code.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: "Comma-separated branches/commits to test. Empty = every branch that changed since the last run."
+        type: string
+        default: ""
+      verbose:
+        description: "Print full test output. The log is PUBLIC and may quote source code."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quality
+  cancel-in-progress: false
+
+env:
+  MAX_REFS: "4"
+
+jobs:
+  detect:
+    name: Find what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      refs: ${{ steps.pick.outputs.refs }}
+      shas: ${{ steps.pick.outputs.shas }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: List the private branches
+        env:
+          DEPLOY_KEY: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          LIST_HEADS: "1"
+          HEAD_LIST_FILE: ${{ runner.temp }}/heads.txt
+        run: bash scripts/checkout-private-source.sh
+
+      - name: Restore the list of already-tested commits
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/tested.txt
+          key: quality-tested-none
+          restore-keys: quality-tested-
+
+      - name: Pick the refs to test
+        id: pick
+        env:
+          INPUT_REFS: ${{ inputs.refs }}
+        run: |
+          set -euo pipefail
+          heads="$RUNNER_TEMP/heads.txt"; tested="$RUNNER_TEMP/tested.txt"
+          touch "$tested"
+          picked=()
+          if [ -n "${INPUT_REFS:-}" ]; then
+            IFS=',' read -ra picked <<<"${INPUT_REFS// /}"
+          else
+            # main first, then everything else whose sha is not yet tested
+            while read -r sha name; do
+              [ -z "$sha" ] && continue
+              grep -qx "$sha" "$tested" && continue
+              if [ "$name" = main ]; then picked=("$name" "${picked[@]}"); else picked+=("$name"); fi
+            done <"$heads"
+          fi
+          picked=("${picked[@]:0:$MAX_REFS}")
+          for r in "${picked[@]:-}"; do
+            [ -z "$r" ] && continue
+            [[ "$r" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::refusing odd ref"; exit 1; }
+          done
+          json="$(printf '%s\n' "${picked[@]:-}" | grep -v '^$' | jq -R . | jq -sc . || echo '[]')"
+          [ -z "$json" ] && json='[]'
+          shas=""
+          for r in "${picked[@]:-}"; do
+            [ -z "$r" ] && continue
+            s="$(awk -v n="$r" '$2==n{print $1}' "$heads")"
+            [ -n "$s" ] && shas="$shas$s"$'\n'
+          done
+          echo "refs=$json" >> "$GITHUB_OUTPUT"
+          { echo 'shas<<EOF'; printf '%s' "$shas"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+          echo "Refs to test: $(jq 'length' <<<"$json") (names are not printed: this log is public)."
+
+  frontend:
+    name: Frontend #${{ strategy.job-index }}
+    needs: detect
+    if: needs.detect.outputs.refs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.detect.outputs.refs) }}
+    env:
+      VITE_SUPABASE_URL: https://example.supabase.co
+      VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4YW1wbGUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY0NTI2NzQwMCwiZXhwIjoxOTYwODQzNDAwfQ.example
+      VITE_WORKER_URL: https://example.fly.dev
+      VERBOSE: ${{ inputs.verbose && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ matrix.ref }}
+      - uses: ./.github/actions/setup-web
+      - name: Library fetch budget (static)
+        working-directory: src
+        run: bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "library budget" npx --yes tsx scripts/check-library-budget.ts
+      - name: Unit tests
+        working-directory: src/frontend
+        run: bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "unit tests" bun run test
+      - name: Production build
+        working-directory: src/frontend
+        run: bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "build" bun run build
+      - name: PWA output check
+        working-directory: src/frontend
+        run: bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "pwa check" bun run check:pwa
+      - name: Capacitor sync matches the committed native projects
+        working-directory: src/frontend
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "cap sync" npx cap sync
+          git diff --quiet -- ios android || { echo "::error::ios/ or android/ differ from 'cap sync'."; exit 1; }
+
+  backend:
+    name: Backend and migrations #${{ strategy.job-index }}
+    needs: detect
+    if: needs.detect.outputs.refs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.detect.outputs.refs) }}
+    env:
+      VERBOSE: ${{ inputs.verbose && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ matrix.ref }}
+      - uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: main
+          dest: base
+      - name: Migration safeguards
+        working-directory: src
+        env:
+          REF_NAME: ${{ matrix.ref }}
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "migration self-tests" \
+            python3 -m unittest discover -s scripts/tests -p 'test_quality_*.py'
+          # Files that differ from main (all of them when testing main itself).
+          changed=()
+          if [ "$REF_NAME" = main ]; then
+            mapfile -t changed < <(find supabase/migrations -type f | sort)
+          else
+            while IFS= read -r f; do changed+=("$f"); done < <(
+              { (cd "$GITHUB_WORKSPACE/base" && find supabase/migrations -type f); find supabase/migrations -type f; } | sort -u |
+              while read -r f; do
+                cmp -s "$GITHUB_WORKSPACE/base/$f" "$f" 2>/dev/null || echo "$f"
+              done)
+          fi
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "migration check" \
+            python3 scripts/quality-check-migrations.py "${changed[@]}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: ffmpeg for the real transcode tests
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Worker tests, build, audit
+        working-directory: src/services/worker
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "worker install" npm ci
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "worker tests" npm test
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "worker build" npm run build
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "worker audit (critical)" npm audit --omit=dev --audit-level=critical
+
+  responsive:
+    name: Responsive #${{ strategy.job-index }}
+    needs: detect
+    if: needs.detect.outputs.refs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.detect.outputs.refs) }}
+    env:
+      VITE_SUPABASE_URL: https://example.supabase.co
+      VITE_SUPABASE_ANON_KEY: placeholder-ci-anon-key
+      VITE_WORKER_URL: https://example.fly.dev
+      DIALETTO_BASE_URL: http://127.0.0.1:4173
+      # Kept on the runner; never uploaded (this repository is public).
+      QUALITY_ARTIFACT_DIR: ${{ runner.temp }}/responsive
+      VERBOSE: ${{ inputs.verbose && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          ssh-key: ${{ secrets.DIALETTO_DEPLOY_KEY }}
+          ref: ${{ matrix.ref }}
+      - uses: ./.github/actions/setup-web
+      - name: Build
+        working-directory: src/frontend
+        run: bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "build" bun run build
+      - name: Isolated Playwright and Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/dialetto-playwright" --no-save --no-package-lock --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/dialetto-playwright/node_modules/playwright/cli.js" install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE_PATH=$RUNNER_TEMP/dialetto-playwright/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - name: Start preview and test 9 widths x 2 themes x 2 locales
+        working-directory: src/frontend
+        run: |
+          bun run serve --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for i in $(seq 1 40); do curl -fsS "$DIALETTO_BASE_URL/login" >/dev/null && break; sleep 1; done
+          bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "responsive layout" node scripts/quality-responsive.mjs
+
+  record:
+    name: Remember what was tested
+    needs: [detect, frontend, backend, responsive]
+    if: always() && needs.detect.outputs.refs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore the previous list
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/tested.txt
+          key: quality-tested-none
+          restore-keys: quality-tested-
+      - name: Append the tested commits
+        env:
+          SHAS: ${{ needs.detect.outputs.shas }}
+        run: |
+          touch "$RUNNER_TEMP/tested.txt"
+          printf '%s' "$SHAS" >> "$RUNNER_TEMP/tested.txt"
+          sort -u "$RUNNER_TEMP/tested.txt" | tail -n 500 > "$RUNNER_TEMP/t.new" && mv "$RUNNER_TEMP/t.new" "$RUNNER_TEMP/tested.txt"
+      - uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/tested.txt
+          key: quality-tested-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Summary
+        env:
+          F: ${{ needs.frontend.result }}
+          B: ${{ needs.backend.result }}
+          R: ${{ needs.responsive.result }}
+        run: |
+          echo "frontend: $F · backend: $B · responsive: $R" >> "$GITHUB_STEP_SUMMARY"
+          echo "A failed commit is recorded as tested so it is not retried every 15 minutes; push a new commit or run manually with refs." >> "$GITHUB_STEP_SUMMARY"

@@ -13,6 +13,10 @@ inputs:
     description: Branch, tag or full commit sha of the private repository to build.
     required: false
     default: main
+  dest:
+    description: Directory to clone into.
+    required: false
+    default: src
 
 outputs:
   sha:
@@ -33,4 +37,5 @@ runs:
       env:
         DEPLOY_KEY: ${{ inputs.ssh-key }}
         REF: ${{ inputs.ref }}
+        DEST: ${{ inputs.dest }}
       run: bash "$GITHUB_WORKSPACE/scripts/checkout-private-source.sh"

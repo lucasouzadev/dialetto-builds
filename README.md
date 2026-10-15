@@ -29,6 +29,7 @@ O código do app fica no repositório **privado** `lucasouzadev/dialetto`. Este 
 | **Supabase deploy** | Aplica migrations e faz deploy das Edge Functions | `ref`, `dry_run`, `deploy_migrations`, `deploy_functions`, … |
 | **Worker deploy** | Testa e faz deploy do worker no Fly.io, com health check | `ref`, `skip_tests`, `skip_health` |
 | **OTA** | Confere o que os apps instalados receberiam; `redeploy` pede o deploy ao Vercel | `action`, `ref` |
+| **Quality** | Frontend (testes, build, PWA, `cap sync`), backend (migrations, worker) e layout responsivo nas branches do privado cujo commit mudou. Roda sozinho a cada 15 min e manualmente (`refs`, `verbose`). Logs só com contagens e nomes que falham; sem artefatos | `refs`, `verbose` |
 | **Check** | Valida os próprios workflows e fluxos (automático, sem secrets) | — |
 
 `ref` é a branch, tag ou commit de `lucasouzadev/dialetto` (padrão `main`).
