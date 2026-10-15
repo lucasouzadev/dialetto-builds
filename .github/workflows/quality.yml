@@ -220,7 +220,7 @@ jobs:
       VITE_WORKER_URL: https://example.fly.dev
       DIALETTO_BASE_URL: http://127.0.0.1:4173
       # Kept on the runner; never uploaded (this repository is public).
-      QUALITY_ARTIFACT_DIR: ${{ runner.temp }}/responsive
+      QUALITY_ARTIFACT_DIR: /tmp/dialetto-responsive
       VERBOSE: ${{ inputs.verbose && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
@@ -243,7 +243,7 @@ jobs:
         working-directory: src/frontend
         run: |
           bun run serve --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/preview.log" 2>&1 &
-          for i in $(seq 1 40); do curl -fsS "$DIALETTO_BASE_URL/login" >/dev/null && break; sleep 1; done
+          for _ in $(seq 1 40); do curl -fsS "$DIALETTO_BASE_URL/login" >/dev/null && break; sleep 1; done
           bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "responsive layout" node scripts/quality-responsive.mjs
 
   record:
