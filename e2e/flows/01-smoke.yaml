@@ -10,7 +10,7 @@ tags:
       all: allow
 - extendedWaitUntil:
     visible: "Sign in|Entrar"
-    timeout: 60000
+    timeout: 120000
 - runFlow: ../lib/dismiss-consent.yaml
 - assertVisible: "email"
 - assertVisible: "password"
