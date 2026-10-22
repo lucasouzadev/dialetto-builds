@@ -10,6 +10,10 @@ OUT="${E2E_OUT:-e2e-output}"
 : "${APP_ZIP:?APP_ZIP is required}"
 mkdir -p "$OUT"
 
+# A freshly booted simulator on a hosted runner can take minutes to start
+# Maestro's XCTest driver ("iOS driver not ready in time"). Give it room.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}"
+
 work="$(mktemp -d)"
 ditto -x -k "$APP_ZIP" "$work"
 app="$work/App.app"
@@ -37,6 +41,14 @@ xcrun simctl boot "$udid" || true
 xcrun simctl bootstatus "$udid" -b
 xcrun simctl install "$udid" "$app"
 xcrun simctl privacy "$udid" grant all club.dialetto.app || true
+
+# Warm up: let the simulator settle, then launch the app once so the first
+# Maestro step does not pay for a cold start. Best effort; the flows still do
+# their own clean launch.
+sleep 20
+xcrun simctl launch "$udid" club.dialetto.app || true
+sleep 10
+xcrun simctl terminate "$udid" club.dialetto.app || true
 
 xcrun simctl io "$udid" recordVideo --codec=h264 --force "$OUT/e2e.mp4" &
 video_pid=$!
