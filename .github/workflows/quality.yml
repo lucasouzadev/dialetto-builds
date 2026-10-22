@@ -177,10 +177,13 @@ jobs:
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/scripts/quiet-run.sh" "migration self-tests" \
             python3 -m unittest discover -s scripts/tests -p 'test_quality_*.py'
-          # Files that differ from main (all of them when testing main itself).
+          # Files that differ from main. On main itself there is no base to diff
+          # against, and re-reviewing 150 historical migrations for destructive
+          # statements only reports what was already approved when it merged, so
+          # main gets the structural checks (names, duplicate timestamps) only.
           changed=()
           if [ "$REF_NAME" = main ]; then
-            mapfile -t changed < <(find supabase/migrations -type f | sort)
+            changed=()
           else
             while IFS= read -r f; do changed+=("$f"); done < <(
               { (cd "$GITHUB_WORKSPACE/base" && find supabase/migrations -type f); find supabase/migrations -type f; } | sort -u |
