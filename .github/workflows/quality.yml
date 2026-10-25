@@ -90,7 +90,12 @@ jobs:
             [ -z "$r" ] && continue
             [[ "$r" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::refusing odd ref"; exit 1; }
           done
-          json="$(printf '%s\n' "${picked[@]:-}" | grep -v '^$' | jq -R . | jq -sc . || echo '[]')"
+          # grep exits 1 when nothing is left (the normal "nothing changed" case);
+          # with pipefail that used to trigger a second `echo '[]'` and wrote two
+          # lines to $GITHUB_OUTPUT ("Invalid format '[]'"), failing the run every
+          # 15 minutes while main was idle. `jq -sc .` already prints [] for
+          # empty input, so tolerate grep's status instead of adding a fallback.
+          json="$(printf '%s\n' "${picked[@]:-}" | { grep -v '^$' || true; } | jq -R . | jq -sc .)"
           [ -z "$json" ] && json='[]'
           shas=""
           for r in "${picked[@]:-}"; do
