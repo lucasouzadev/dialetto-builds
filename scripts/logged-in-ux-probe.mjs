@@ -41,9 +41,9 @@ try {
     let loggedIn = false;
     try {
       await page.goto(`${ORIGIN}/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.locator('form input:not([type="password"])').first().fill(email);
+      await page.locator('input:not([type="password"])').first().fill(email);
       await page.locator('input[type="password"]').first().fill(password);
-      await page.locator('form button[type="submit"]').first().click();
+      await page.locator('input[type="password"]').first().press('Enter');
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30000 });
       loggedIn = true;
     } catch (_) {

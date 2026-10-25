@@ -1,7 +1,7 @@
 name: Logged-in UX QA (QA account, no artifacts)
 
 # Needs two REPOSITORY secrets the maintainer registers by hand:
-#   QA_EMAIL (e-mail OR @username of the login), QA_PASSWORD
+#   QA_EMAIL (the account e-mail; the login field is type=email), QA_PASSWORD
 #   (a dedicated test account; never a personal one)
 # Without them the job passes with a SKIP notice, so a missing secret never
 # turns the schedule red.
