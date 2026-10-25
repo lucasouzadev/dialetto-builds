@@ -1,0 +1,40 @@
+name: Logged-in UX QA (QA account, no artifacts)
+
+# Needs two REPOSITORY secrets the maintainer registers by hand:
+#   QA_EMAIL (e-mail OR @username of the login), QA_PASSWORD
+#   (a dedicated test account; never a personal one)
+# Without them the job passes with a SKIP notice, so a missing secret never
+# turns the schedule red.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 7 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  logged-in-responsive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax and install isolated browser
+        run: |
+          set -euo pipefail
+          node scripts/check-logged-in-ux-safety.mjs
+          node --check scripts/logged-in-ux-probe.mjs
+          npm install --prefix "$RUNNER_TEMP/ux" --no-package-lock --no-save --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/ux/node_modules/playwright/cli.js" install --with-deps chromium
+          ln -s "$RUNNER_TEMP/ux/node_modules" scripts/node_modules
+      - name: Run the logged-in probe
+        env:
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+        run: node scripts/logged-in-ux-probe.mjs
