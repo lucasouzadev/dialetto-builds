@@ -4,7 +4,8 @@
 import { chromium } from 'playwright';
 
 const ORIGIN = 'https://dialetto.club';
-const routes = ['/login', '/signup'];
+// Public, unauthenticated screens only (sub-project 46, Task 8c).
+const routes = ['/login', '/signup', '/ajuda', '/confianca', '/licencas', '/termos', '/privacidade', '/cookies', '/feedback'];
 const widths = [320, 360, 375, 390, 428, 768, 1024, 1440, 1920];
 const schemes = ['light', 'dark'];
 const locales = ['pt-BR', 'en-US'];
@@ -61,7 +62,8 @@ try {
         });
         if (metrics.overflow) reasons.push('horizontal overflow');
         if (metrics.clippedControls) reasons.push('clipped interactive control');
-        if (!metrics.contentReady || metrics.visibleInputs === 0) reasons.push('login/signup form not visibly rendered');
+        if (!metrics.contentReady) reasons.push('page not visibly rendered');
+        if ((route === '/login' || route === '/signup') && metrics.visibleInputs === 0) reasons.push('login/signup form not visibly rendered');
       } catch (_) {
         // Never echo exception messages, URLs, HTML, user content or credentials into public logs.
         reasons.push('navigation/browser exception');
