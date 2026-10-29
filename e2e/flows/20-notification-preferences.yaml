@@ -18,9 +18,9 @@ tags:
 - waitForAnimationToEnd
 - takeScreenshot: 20a-account-menu
 - extendedWaitUntil:
-    visible: "View profile|Ver perfil"
+    visible: "Settings|Configurações|Ajustes"
     timeout: 15000
-- tapOn: "View profile|Ver perfil"
+- tapOn: "Settings|Configurações|Ajustes"
 - scrollUntilVisible:
     element: "Notifications|Notificações"
     timeout: 20000
