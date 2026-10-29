@@ -17,6 +17,29 @@ adb wait-for-device
 adb install -r -g "$APK_PATH"
 adb logcat -c || true
 
+# Security audit S-09/S-20: confirm on a real (emulated) install that the shipped manifest really has backup off, and say
+# what the cleartext setting resolved to. Only package flags are printed, nothing about any account.
+echo "::group::Manifest hardening"
+pkg_dump="$(adb shell dumpsys package club.dialetto.app | tr -d '\r')"
+flags_lines="$(printf '%s\n' "$pkg_dump" | grep -E '^\s*(pkgFlags|flags|privateFlags)=' | head -5 || true)"
+printf '%s\n' "$flags_lines" | tee "$OUT/manifest-flags.txt"
+hardening=0
+if printf '%s\n' "$flags_lines" | grep -q 'ALLOW_BACKUP'; then
+  echo "HARDENING FAIL: ALLOW_BACKUP is set on the installed app" | tee -a "$OUT/manifest-flags.txt"
+  hardening=1
+else
+  echo "HARDENING PASS: ALLOW_BACKUP is not set" | tee -a "$OUT/manifest-flags.txt"
+fi
+if printf '%s\n' "$pkg_dump" | grep -qi 'usesCleartextTraffic=true'; then
+  echo "HARDENING FAIL: cleartext traffic is allowed" | tee -a "$OUT/manifest-flags.txt"
+  hardening=1
+elif printf '%s\n' "$pkg_dump" | grep -qi 'usesCleartextTraffic=false'; then
+  echo "HARDENING PASS: cleartext traffic is not allowed" | tee -a "$OUT/manifest-flags.txt"
+else
+  echo "HARDENING INFO: this Android version does not report usesCleartextTraffic" | tee -a "$OUT/manifest-flags.txt"
+fi
+echo "::endgroup::"
+
 env_args=()
 exclude=()
 if [ -n "${E2E_EMAIL:-}" ] && [ -n "${E2E_PASSWORD:-}" ]; then
@@ -46,4 +69,5 @@ adb exec-out screencap -p > "$OUT/final-screen.png" || true
 # first (and drop any screenshot/video that contains them).
 python3 -I e2e/scrub_artifacts.py "$OUT" || true
 python3 e2e/summarize.py "$OUT/report.xml" "Android" || true
+if [ "$code" -eq 0 ] && [ "$hardening" -ne 0 ]; then code=1; fi
 exit "$code"
