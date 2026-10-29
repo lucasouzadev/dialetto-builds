@@ -17,6 +17,11 @@ adb wait-for-device
 adb install -r -g "$APK_PATH"
 adb logcat -c || true
 
+# The software-rendered emulator is slow enough that the launcher sometimes raises "Pixel Launcher isn't responding"
+# over the app, which hides the screen from the flow (seen in run 40953312302). That dialog is about the emulator,
+# not the app under test, so do not show system error dialogs.
+adb shell settings put global hide_error_dialogs 1 || true
+
 # Security audit S-09/S-20: confirm on a real (emulated) install that the shipped manifest really has backup off, and say
 # what the cleartext setting resolved to. Only package flags are printed, nothing about any account.
 echo "::group::Manifest hardening"
