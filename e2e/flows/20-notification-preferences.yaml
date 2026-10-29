@@ -11,12 +11,16 @@ tags:
     permissions:
       all: allow
 - runFlow: ../lib/sign-in.yaml
-- tapOn: "Account|Conta"
-- runFlow:
-    when:
-      visible: "View profile|Ver perfil"
-    commands:
-      - tapOn: "View profile|Ver perfil"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Account|Conta"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- takeScreenshot: 20a-account-menu
+- extendedWaitUntil:
+    visible: "View profile|Ver perfil"
+    timeout: 15000
+- tapOn: "View profile|Ver perfil"
 - scrollUntilVisible:
     element: "Notifications|Notificações"
     timeout: 20000
