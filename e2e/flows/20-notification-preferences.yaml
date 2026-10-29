@@ -12,7 +12,11 @@ tags:
       all: allow
 - runFlow: ../lib/sign-in.yaml
 - tapOn: "Account|Conta"
-- tapOn: "View profile|Ver perfil"
+- runFlow:
+    when:
+      visible: "View profile|Ver perfil"
+    commands:
+      - tapOn: "View profile|Ver perfil"
 - scrollUntilVisible:
     element: "Notifications|Notificações"
     timeout: 20000
