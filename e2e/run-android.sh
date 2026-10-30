@@ -67,6 +67,24 @@ maestro test e2e/flows \
 code=$?
 set -e
 
+# Audit S-20 / App Links. The debug APK is signed with a different key than the one in assetlinks.json, so Android does
+# NOT verify the domain here (a link opens Chrome, which is expected). What can be proven on this build:
+#  1. the manifest claims only the public paths, and 2. the app, when it is handed such a link, shows the page.
+{
+  echo "--- App Links scope"
+  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -E "PathPrefix|Authority|Scheme" | sort -u | head -12
+  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/p/"' && \
+  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/u/"' && \
+  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/share/"' \
+    && echo "APPLINK PASS: /p/ /u/ /share/ declared" || { echo "APPLINK FAIL: expected prefixes missing"; touch "$OUT/.hfail"; }
+  if adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -qE 'Path: "/"|PathPattern: ".\*"'; then echo "APPLINK FAIL: claims the whole domain"; touch "$OUT/.hfail"; fi
+  adb shell pm clear club.dialetto.app >/dev/null 2>&1 || true
+  adb shell am start -W -a android.intent.action.VIEW -d "https://dialetto.club/u/juice" -p club.dialetto.app >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5 6 7 8; do sleep 8; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1 && grep -qi 'juice' "$OUT/ui.xml" && break; done
+  if grep -qi 'juice' "$OUT/ui.xml" 2>/dev/null; then echo "APPLINK PASS: the app rendered /u/juice from an https link"; else echo "APPLINK FAIL: the app did not render /u/juice"; touch "$OUT/.hfail"; fi
+  rm -f "$OUT/ui.xml"
+} 2>&1 | tee -a "$OUT/manifest-flags.txt"
+[ -f "$OUT/.hfail" ] && hardening=1 && rm -f "$OUT/.hfail"
 adb logcat -d -v time > "$OUT/logcat.txt" || true
 adb exec-out screencap -p > "$OUT/final-screen.png" || true
 # This repository is public and so are its artifacts: GitHub masks secrets in
