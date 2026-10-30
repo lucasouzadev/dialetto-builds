@@ -73,14 +73,17 @@ set -e
 {
   echo "--- App Links scope"
   adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -E "PathPrefix|Authority|Scheme" | sort -u | head -12
-  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/p/"' && \
-  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/u/"' && \
-  adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -q 'PathPrefix: "/share/"' \
-    && echo "APPLINK PASS: /p/ /u/ /share/ declared" || { echo "APPLINK FAIL: expected prefixes missing"; touch "$OUT/.hfail"; }
+  dump="$(adb shell dumpsys package club.dialetto.app | tr -d '\r')"
+  if printf '%s\n' "$dump" | grep -q 'PathPrefix: "/p/"' && printf '%s\n' "$dump" | grep -q 'PathPrefix: "/u/"' \
+    && printf '%s\n' "$dump" | grep -q 'PathPrefix: "/share/"'; then
+    echo "APPLINK PASS: /p/ /u/ /share/ declared"
+  else
+    echo "APPLINK FAIL: expected prefixes missing"; touch "$OUT/.hfail"
+  fi
   if adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -qE 'Path: "/"|PathPattern: ".\*"'; then echo "APPLINK FAIL: claims the whole domain"; touch "$OUT/.hfail"; fi
   adb shell pm clear club.dialetto.app >/dev/null 2>&1 || true
   adb shell am start -W -a android.intent.action.VIEW -d "https://dialetto.club/u/juice" -p club.dialetto.app >/dev/null 2>&1 || true
-  for i in 1 2 3 4 5 6 7 8; do sleep 8; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1 && grep -qi 'juice' "$OUT/ui.xml" && break; done
+  for _ in 1 2 3 4 5 6 7 8; do sleep 8; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1 && grep -qi 'juice' "$OUT/ui.xml" && break; done
   if grep -qi 'juice' "$OUT/ui.xml" 2>/dev/null; then echo "APPLINK PASS: the app rendered /u/juice from an https link"; else echo "APPLINK FAIL: the app did not render /u/juice"; touch "$OUT/.hfail"; fi
   rm -f "$OUT/ui.xml"
 } 2>&1 | tee -a "$OUT/manifest-flags.txt"
