@@ -11,12 +11,34 @@ tags:
     permissions:
       all: allow
 - runFlow: ../lib/sign-in.yaml
-- tapOn: "Account|Conta"
-- tapOn: "View profile|Ver perfil"
-- scrollUntilVisible:
-    element: "Notifications|Notificações"
-    timeout: 20000
+- waitForAnimationToEnd
+- tapOn:
+    text: "Account|Conta"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- takeScreenshot: 20a-account-menu
+- extendedWaitUntil:
+    visible: "Settings|Configurações|Ajustes"
+    timeout: 15000
+- tapOn: "Settings|Configurações|Ajustes"
+# A test build is older than production, so the OTA pill ("Update available") can sit over the list: dismiss it.
+- runFlow:
+    when:
+      visible: "Later|Depois"
+    commands:
+      - tapOn: "Later|Depois"
+# scrollUntilVisible did not move this list on Android (the page ends under a bar), so swipe by hand.
+- repeat:
+    while:
+      notVisible: "Notifications|Notificações"
+    times: 4
+    commands:
+      - swipe:
+          start: 50%, 78%
+          end: 50%, 30%
+          duration: 500
 - tapOn: "Notifications|Notificações"
 - assertVisible: "What to notify you about|O que avisar"
-- assertVisible: "What's new|Novidades"
+- assertVisible: "Share|Compartilhamento"
+- assertVisible: "Library|Biblioteca"
 - takeScreenshot: 20-notification-preferences
