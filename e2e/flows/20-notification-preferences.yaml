@@ -32,5 +32,6 @@ tags:
     timeout: 20000
 - tapOn: "Notifications|Notificações"
 - assertVisible: "What to notify you about|O que avisar"
-- assertVisible: "What's new|Novidades"
+- assertVisible: "Share|Compartilhamento"
+- assertVisible: "Library|Biblioteca"
 - takeScreenshot: 20-notification-preferences
