@@ -27,9 +27,16 @@ tags:
       visible: "Later|Depois"
     commands:
       - tapOn: "Later|Depois"
-- scrollUntilVisible:
-    element: "Notifications|Notificações"
-    timeout: 20000
+# scrollUntilVisible did not move this list on Android (the page ends under a bar), so swipe by hand.
+- repeat:
+    while:
+      notVisible: "Notifications|Notificações"
+    times: 4
+    commands:
+      - swipe:
+          start: 50%, 78%
+          end: 50%, 30%
+          duration: 500
 - tapOn: "Notifications|Notificações"
 - assertVisible: "What to notify you about|O que avisar"
 - assertVisible: "Share|Compartilhamento"

@@ -1,0 +1,23 @@
+# A public showcase link opened from outside the app lands on the showcase, inside the app, without an account.
+# Uses the in-app deep-link handler (src/platform/deepLinks.ts); on an unverified debug build the OS would normally ask
+# which app to use, so the link is opened with the package pinned by run-android.sh / run-ios.sh before this flow.
+appId: club.dialetto.app
+name: Public showcase link opens in the app
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in|Entrar"
+    timeout: 60000
+- runFlow: ../lib/dismiss-consent.yaml
+- openLink:
+    link: https://dialetto.club/u/juice
+    autoVerify: true
+- extendedWaitUntil:
+    visible: ".*juice.*"
+    timeout: 60000
+- takeScreenshot: 30-public-showcase
