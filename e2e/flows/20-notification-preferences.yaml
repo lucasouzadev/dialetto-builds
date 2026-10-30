@@ -21,6 +21,12 @@ tags:
     visible: "Settings|Configurações|Ajustes"
     timeout: 15000
 - tapOn: "Settings|Configurações|Ajustes"
+# A test build is older than production, so the OTA pill ("Update available") can sit over the list: dismiss it.
+- runFlow:
+    when:
+      visible: "Later|Depois"
+    commands:
+      - tapOn: "Later|Depois"
 - scrollUntilVisible:
     element: "Notifications|Notificações"
     timeout: 20000
