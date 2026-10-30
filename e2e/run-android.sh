@@ -73,19 +73,22 @@ set -e
 {
   echo "--- App Links scope"
   adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -E "PathPrefix|Authority|Scheme" | sort -u | head -12
-  dump="$(adb shell dumpsys package club.dialetto.app | tr -d '\r')"
-  if printf '%s\n' "$dump" | grep -q 'PathPrefix: "/p/"' && printf '%s\n' "$dump" | grep -q 'PathPrefix: "/u/"' \
-    && printf '%s\n' "$dump" | grep -q 'PathPrefix: "/share/"'; then
-    echo "APPLINK PASS: /p/ /u/ /share/ declared"
-  else
-    echo "APPLINK FAIL: expected prefixes missing"; touch "$OUT/.hfail"
-  fi
-  if adb shell dumpsys package club.dialetto.app | tr -d '\r' | grep -qE 'Path: "/"|PathPattern: ".\*"'; then echo "APPLINK FAIL: claims the whole domain"; touch "$OUT/.hfail"; fi
+  # Behaviour, not dump format: which BROWSABLE VIEW handlers does Android list for each URL (unverified ones included)?
+  for path in /p/x /u/juice /share/x; do
+    if adb shell cmd package query-activities --brief -a android.intent.action.VIEW -c android.intent.category.BROWSABLE \
+      -d "https://dialetto.club$path" | tr -d '\r' | grep -q 'club.dialetto.app'; then echo "APPLINK PASS: $path is offered to the app"
+    else echo "APPLINK FAIL: $path is not offered to the app"; touch "$OUT/.hfail"; fi
+  done
+  for path in /profile /login /reset-password /library; do
+    if adb shell cmd package query-activities --brief -a android.intent.action.VIEW -c android.intent.category.BROWSABLE \
+      -d "https://dialetto.club$path" | tr -d '\r' | grep -q 'club.dialetto.app'; then echo "APPLINK FAIL: $path is claimed by the app"; touch "$OUT/.hfail"
+    else echo "APPLINK PASS: $path stays in the browser"; fi
+  done
   adb shell pm clear club.dialetto.app >/dev/null 2>&1 || true
   adb shell am start -W -a android.intent.action.VIEW -d "https://dialetto.club/u/juice" -p club.dialetto.app >/dev/null 2>&1 || true
   for _ in 1 2 3 4 5 6 7 8; do sleep 8; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1 && grep -qi 'juice' "$OUT/ui.xml" && break; done
+  adb exec-out screencap -p > "$OUT/applink-screen.png" || true
   if grep -qi 'juice' "$OUT/ui.xml" 2>/dev/null; then echo "APPLINK PASS: the app rendered /u/juice from an https link"; else echo "APPLINK FAIL: the app did not render /u/juice"; touch "$OUT/.hfail"; fi
-  rm -f "$OUT/ui.xml"
 } 2>&1 | tee -a "$OUT/manifest-flags.txt"
 [ -f "$OUT/.hfail" ] && hardening=1 && rm -f "$OUT/.hfail"
 adb logcat -d -v time > "$OUT/logcat.txt" || true
