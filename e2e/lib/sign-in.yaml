@@ -14,5 +14,5 @@ appId: club.dialetto.app
 - hideKeyboard
 - tapOn: "Sign in|Entrar"
 - extendedWaitUntil:
-    visible: "Workbench|Bancada"
+    visible: "Workbench.*|Bancada.*"
     timeout: 60000
