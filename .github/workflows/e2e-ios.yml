@@ -19,6 +19,14 @@ on:
         description: "Only run flows with these Maestro tags (comma separated, e.g. smoke). Empty = all."
         type: string
         default: ""
+      qa_email:
+        description: "THROWAWAY test account e-mail (inputs of a public repo are visible: never a real account). Empty = use the E2E_EMAIL secret."
+        type: string
+        default: ""
+      qa_password:
+        description: "THROWAWAY test account password. Empty = use the E2E_PASSWORD secret."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -60,8 +68,8 @@ jobs:
         env:
           APP_ZIP: app/App.app.zip
           E2E_OUT: e2e-output
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          E2E_EMAIL: ${{ inputs.qa_email || secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ inputs.qa_password || secrets.E2E_PASSWORD }}
           E2E_TAGS: ${{ inputs.tags }}
         run: bash e2e/run-ios.sh
 
