@@ -185,9 +185,17 @@ jobs:
         run: |
           key_file="$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
           mkdir -p "$RUNNER_TEMP/asc"
-          printf '%s' "$ASC_KEY_P8" | tr -d '\r' | perl -pe 's/\\n/\n/g' > "$key_file"
-          [ -n "$(tail -c1 "$key_file")" ] && echo >> "$key_file"
+          # The secret may be the .p8 as is, flattened to one line, base64 of the
+          # file, or just the base64 body: normalize-p8.mjs rebuilds a real PEM.
+          node .github/scripts/normalize-p8.mjs > "$key_file"
           chmod 600 "$key_file"
+          # The later steps (and the verify script) read the key from the
+          # environment. The rebuilt PEM is not byte-identical to the secret, so
+          # GitHub would not mask it in those steps' logs: mask every line first.
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done < "$key_file"
+          { echo "ASC_KEY_P8<<ASC_PEM_EOF"; cat "$key_file"; echo "ASC_PEM_EOF"; } >> "$GITHUB_ENV"
           shape() { if grep -Eq "$2" <<<"$1"; then echo yes; else echo NO; fi; }
           echo "Key ID is 10 letters/digits:         $(shape "$ASC_KEY_ID" '^[A-Z0-9]{10}$')"
           echo "Issuer ID is a UUID:                 $(shape "$ASC_ISSUER_ID" '^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$')"
