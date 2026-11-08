@@ -1,0 +1,2 @@
+# Routine, non-build workflows named in AGENTS.md. Builds (apk/testflight/ios-check) and deploys still ask.
+gh workflow run (e2e|check|quality)
