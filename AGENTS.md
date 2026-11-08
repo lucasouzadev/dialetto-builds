@@ -2,7 +2,7 @@
 
 CI only: workflows, E2E flows and scripts for Dialetto. **No app source**: every run clones the private repo `lucasouzadev/dialetto` with a read-only deploy key. Every log, artifact and file here can be read by anyone.
 Working rules live in the private repo: `AGENTS.md`/`CLAUDE.md`, `docs/agents/QUALITY_GATES_2026-10-14.md`, `docs/OTA_OU_BUILD.md`. Read `README.md` and `SECURE_PUBLIC_QA.md` here too.
-Built on agent-kit 1.4.0; generic rules in `docs/agents/standard/`. Owner decisions: `docs/agents/OWNER_DECISIONS.md`.
+Built on agent-kit 1.5.0; generic rules in `docs/agents/standard/`. Owner decisions: `docs/agents/OWNER_DECISIONS.md`.
 
 ## Session start
 Read this file and `README.md`. Newest state first (latest runs, `git log -15`). Output to the owner: caveman, ≤ 15 lines, in Brazilian Portuguese, canary = form of address the owner gives at session start, never stored (`docs/agents/standard/CANARY.md`). Lead from plain talk (skills `session-guide`, `intent-compiler`); near usage limits offer a continuation prompt (skill `baton-pass`).
