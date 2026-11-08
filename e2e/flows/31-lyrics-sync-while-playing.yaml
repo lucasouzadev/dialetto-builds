@@ -30,6 +30,7 @@ tags:
     commands:
       - tapOn: "Play and mark|Tocar e marcar|Mark|Marcar"
 - takeScreenshot: 33-sync-after-taps
-- tapOn: "Pause|Pausar"
-  optional: true
+- tapOn:
+    text: "Pause|Pausar"
+    optional: true
 - takeScreenshot: 34-sync-review-or-playing
