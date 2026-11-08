@@ -1,0 +1,17 @@
+# Probe for the Lyrics v3 flow (sub-project 54): signs in with the E2E account and
+# checks that the QA project exists on it. It only looks at the library, so no
+# lyric text is on screen. If it fails, the E2E account is not the one that holds
+# the QA project and flow 31 must not run.
+appId: club.dialetto.app
+name: Lyrics v3 probe - the QA project is on the E2E account
+tags:
+  - lyrics-probe
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Folders.*|Pastas.*"
+- takeScreenshot: 30-probe-library
+- assertVisible: "QA letra v3.*"

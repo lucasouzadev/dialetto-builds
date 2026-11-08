@@ -1,0 +1,35 @@
+# Lyrics v3 (sub-project 54): opens a track's lyrics, enters "Sincronizar tocando",
+# marks the lines and reaches the review, then DISCARDS so the account is unchanged.
+# The simulator/emulator may not play audio: "Tocar e marcar" is tolerated either way.
+# Needs a track with lyrics on the E2E account (project "QA letra v3 ..."). The
+# screens show the lyric lines: use a track whose lyrics are synthetic.
+appId: club.dialetto.app
+name: Lyrics v3 - sync while playing
+tags:
+  - lyrics
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Folders.*|Pastas.*"
+- tapOn: "QA letra v3.*"
+- tapOn: "QA letra v3 faixa curta.*"
+- takeScreenshot: 31-track-open
+- tapOn: "Lyrics|Letra"
+- takeScreenshot: 31-lyrics-open
+- tapOn: "Sync while playing|Sincronizar tocando"
+- extendedWaitUntil:
+    visible: "Play and mark|Tocar e marcar|Mark|Marcar"
+    timeout: 15000
+- takeScreenshot: 32-sync-start
+- repeat:
+    times: 3
+    commands:
+      - tapOn: "Play and mark|Tocar e marcar|Mark|Marcar"
+- takeScreenshot: 33-sync-after-taps
+- tapOn: "Pause|Pausar"
+  optional: true
+- takeScreenshot: 34-sync-review-or-playing
