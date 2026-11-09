@@ -216,7 +216,8 @@ jobs:
     name: Responsive #${{ strategy.job-index }}
     needs: detect
     if: needs.detect.outputs.refs != '[]'
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, which Playwright 1.56.1 does not support (install --with-deps fails).
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
