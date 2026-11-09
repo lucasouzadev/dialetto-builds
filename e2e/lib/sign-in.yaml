@@ -11,8 +11,18 @@ appId: club.dialetto.app
 - inputText: ${EMAIL}
 - tapOn: "password"
 - inputText: ${PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in|Entrar"
+# `hideKeyboard` fails on the iOS simulator ("Couldn't hide the keyboard"), so submit
+# with the keyboard's return key and fall back to the button if the form did not go.
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Workbench.*|Bancada.*"
+    timeout: 8000
+    optional: true
+- runFlow:
+    when:
+      notVisible: "Workbench.*|Bancada.*"
+    commands:
+      - tapOn: "Sign in|Entrar"
 - extendedWaitUntil:
     visible: "Workbench.*|Bancada.*"
     timeout: 60000
