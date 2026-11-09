@@ -14,4 +14,4 @@ tags:
 - runFlow: ../lib/sign-in.yaml
 - tapOn: "Folders.*|Pastas.*"
 - takeScreenshot: 30-probe-library
-- assertVisible: "QA letra v3.*"
+- assertVisible: "QA letra v3 neutro.*"
