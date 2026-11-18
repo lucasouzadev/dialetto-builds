@@ -17,9 +17,9 @@ tags:
 - tapOn: "Tracks.*|Faixas.*"
 # The neutral track that e2e/seed-account.mjs puts on the account.
 - extendedWaitUntil:
-    visible: "QA E2E letra.*"
+    visible: ".*QA E2E letra.*"
     timeout: 30000
-- tapOn: "QA E2E letra.*"
+- tapOn: ".*QA E2E letra.*"
 - tapOn: "Lyrics|Letra"
 - takeScreenshot: 40-lyrics-open
 - runFlow:

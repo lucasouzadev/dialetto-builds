@@ -17,9 +17,9 @@ tags:
 - runFlow: ../lib/sign-in.yaml
 - tapOn: "Tracks.*|Faixas.*"
 - extendedWaitUntil:
-    visible: "QA E2E letra.*"
+    visible: ".*QA E2E letra.*"
     timeout: 30000
-- tapOn: "QA E2E letra.*"
+- tapOn: ".*QA E2E letra.*"
 - tapOn: "Lyrics|Letra"
 - takeScreenshot: 50-lyrics-before
 - runFlow:
