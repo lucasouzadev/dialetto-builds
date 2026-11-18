@@ -31,6 +31,8 @@ tags:
     element: "Sync automatically.*|Sincronizar automaticamente.*"
     direction: DOWN
     timeout: 20000
+    # centred: at the bottom edge it sits under the player's tab bar and the tap misses
+    centerElement: true
 - takeScreenshot: 51-editor-sync
 - tapOn: "Sync automatically.*|Sincronizar automaticamente.*"
 # The editor closes and the lyric shows the job; wait for the result card at the top.
