@@ -1,0 +1,33 @@
+# Lyrics v4 (sub-project 60, T8): one automatic sync IN PRODUCTION of the seeded synthetic
+# track (spoken intro, voice at 9.035 s, "A letra começa em" set to 9.0 on the account).
+# Taps the app's own "Sync automatically" button, so it goes through the Edge function and
+# the worker for real, and waits for the result card. It only taps when the lyric has no
+# result yet, so it spends one sync of the free monthly balance once, not on every run.
+# The times themselves are checked against the answer key outside the app (QA report).
+appId: club.dialetto.app
+name: Lyrics v4 - production sync with voice start
+tags:
+  - lyrics-prod-sync
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Tracks.*|Faixas.*"
+- extendedWaitUntil:
+    visible: "QA E2E letra.*"
+    timeout: 30000
+- tapOn: "QA E2E letra.*"
+- tapOn: "Lyrics|Letra"
+- takeScreenshot: 50-lyrics-before
+- runFlow:
+    when:
+      notVisible: ".*lines synced.*|.*linhas sincronizadas.*"
+    commands:
+      - tapOn: "Sync automatically.*|Sincronizar automaticamente.*|Sync|Sincronizar"
+- extendedWaitUntil:
+    visible: ".*lines synced.*|.*linhas sincronizadas.*"
+    timeout: 300000
+- takeScreenshot: 51-lyrics-result
