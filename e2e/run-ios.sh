@@ -63,6 +63,12 @@ else
 fi
 include=()
 if [ -n "${E2E_TAGS:-}" ]; then include+=(--include-tags="${E2E_TAGS}"); fi
+# Flow 33 spends a sync of the account's monthly balance: only when asked for by tag.
+# Maestro takes one --exclude-tags list, so join it with the login exclusion when both apply.
+case ",${E2E_TAGS:-}," in
+  *,lyrics-prod-sync,*) ;;
+  *) if [ ${#exclude[@]} -gt 0 ]; then exclude=(--exclude-tags=login,lyrics-prod-sync); else exclude=(--exclude-tags=lyrics-prod-sync); fi ;;
+esac
 
 # bash 3.2 (macOS) treats an empty array as unset under `set -u`, hence the
 # ${arr[@]+...} form.

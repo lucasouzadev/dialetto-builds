@@ -39,8 +39,8 @@ tags:
     direction: DOWN
     timeout: 20000
 - takeScreenshot: 41-editor-row
-- assertVisible: "not set|não definido"
-- tapOn: "Set|Definir"
+# The row offers "Set" when no start is saved and "Change" when one is.
+- tapOn: "Set|Definir|Change|Alterar"
 - assertVisible: "Where does the voice come in\\?|Onde a voz entra\\?"
 - takeScreenshot: 42-sheet
 - tapOn: "Mark here.*|Marcar aqui.*"
