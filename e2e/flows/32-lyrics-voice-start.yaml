@@ -1,5 +1,5 @@
-# Lyrics v4 (sub-project 60, T8): "A letra começa em" on a phone. Opens the FIRST track
-# of the E2E account, opens its lyrics and the editor, finds the row, opens the sheet,
+# Lyrics v4 (sub-project 60, T8): "A letra começa em" on a phone. Opens the seeded track
+# "QA E2E letra" of the E2E account, opens its lyrics and the editor, finds the row, opens the sheet,
 # marks a start, clears it and cancels the editor. Nothing is saved: in the editor the
 # start only reaches the database with "Salvar", which this flow never taps.
 # The simulator/emulator may not play audio; the mark then takes the current position.
@@ -15,9 +15,11 @@ tags:
       all: allow
 - runFlow: ../lib/sign-in.yaml
 - tapOn: "Tracks.*|Faixas.*"
-# First track of the list (no title is assumed).
-- tapOn:
-    point: "50%,32%"
+# The neutral track that e2e/seed-account.mjs puts on the account.
+- extendedWaitUntil:
+    visible: "QA E2E letra"
+    timeout: 30000
+- tapOn: "QA E2E letra"
 - tapOn: "Lyrics|Letra"
 - takeScreenshot: 40-lyrics-open
 - runFlow:

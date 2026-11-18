@@ -56,6 +56,12 @@ fi
 include=()
 if [ -n "${E2E_TAGS:-}" ]; then include+=(--include-tags="${E2E_TAGS}"); fi
 
+# One neutral track on the E2E account (idempotent; see e2e/seed-account.mjs). A failure
+# here only warns: the flows that need the track then fail with their own message.
+if [ -n "${E2E_EMAIL:-}" ] && [ -n "${E2E_PASSWORD:-}" ]; then
+  node e2e/seed-account.mjs || echo "::warning::seed of the E2E account failed"
+fi
+
 set +e
 maestro test e2e/flows \
   ${env_args[@]+"${env_args[@]}"} \
