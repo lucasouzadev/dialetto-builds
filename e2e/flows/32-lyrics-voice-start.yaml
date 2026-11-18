@@ -20,6 +20,8 @@ tags:
     visible: ".*QA E2E letra.*"
     timeout: 30000
 - tapOn: ".*QA E2E letra.*"
+# Tapping the row plays it in the mini-player capsule; the lyric lives in the open player.
+- tapOn: "Open now playing|Abrir reprodução"
 - tapOn: "Lyrics|Letra"
 - takeScreenshot: 40-lyrics-open
 - runFlow:
