@@ -1,0 +1,57 @@
+# Lyrics v4 (sub-project 60, T8): "A letra começa em" on a phone. Opens the seeded track
+# "QA E2E letra" of the E2E account, opens its lyrics and the editor, finds the row, opens the sheet,
+# marks a start, clears it and cancels the editor. Nothing is saved: in the editor the
+# start only reaches the database with "Salvar", which this flow never taps.
+# The simulator/emulator may not play audio; the mark then takes the current position.
+appId: club.dialetto.app
+name: Lyrics v4 - voice start (A letra começa em)
+tags:
+  - lyrics-voice-start
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Tracks.*|Faixas.*"
+# The neutral track that e2e/seed-account.mjs puts on the account.
+- extendedWaitUntil:
+    visible: ".*QA E2E letra.*"
+    timeout: 30000
+- tapOn: ".*QA E2E letra.*"
+# Tapping the row plays it in the mini-player capsule; the lyric lives in the open player.
+- tapOn: "Open now playing|Abrir reprodução"
+- tapOn: "Lyrics|Letra"
+- takeScreenshot: 40-lyrics-open
+- runFlow:
+    when:
+      visible: "Edit lyrics|Editar letra"
+    commands:
+      - tapOn: "Edit lyrics|Editar letra"
+- runFlow:
+    when:
+      visible: "Add lyrics|Adicionar letra"
+    commands:
+      - tapOn: "Add lyrics|Adicionar letra"
+- scrollUntilVisible:
+    element: "Lyrics start at|A letra começa em|Starts at|Começa em"
+    direction: DOWN
+    timeout: 20000
+- takeScreenshot: 41-editor-row
+# The row offers "Set" when no start is saved and "Change" when one is.
+- tapOn: "Set|Definir|Change|Alterar"
+- assertVisible: "Where does the voice come in\\?|Onde a voz entra\\?"
+- takeScreenshot: 42-sheet
+- tapOn: "Mark here.*|Marcar aqui.*"
+- assertNotVisible: "Where does the voice come in\\?|Onde a voz entra\\?"
+- assertVisible: "Change|Alterar"
+- takeScreenshot: 43-editor-marked
+- tapOn: "Clear.*|Limpar.*"
+- assertVisible: "not set|não definido"
+- scrollUntilVisible:
+    element: "Cancel|Cancelar"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Cancel|Cancelar"
+- takeScreenshot: 44-editor-cancelled

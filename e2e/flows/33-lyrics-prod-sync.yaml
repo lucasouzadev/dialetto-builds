@@ -1,0 +1,47 @@
+# Lyrics v4 (sub-project 60, T8): one automatic sync IN PRODUCTION of the seeded synthetic
+# track (spoken intro, voice at 9.035 s, "A letra começa em" set to 9.0 on the account).
+# Taps the app's own "Sync automatically" button, so it goes through the Edge function and
+# the worker for real, and waits for the result card. Each run spends ONE sync of the
+# account's free monthly balance, so the run scripts leave this flow out unless the tag
+# lyrics-prod-sync is asked for explicitly.
+# The times themselves are checked against the answer key outside the app (QA report).
+appId: club.dialetto.app
+name: Lyrics v4 - production sync with voice start
+tags:
+  - lyrics-prod-sync
+  - login
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: ../lib/sign-in.yaml
+- tapOn: "Tracks.*|Faixas.*"
+- extendedWaitUntil:
+    visible: ".*QA E2E letra.*"
+    timeout: 30000
+- tapOn: ".*QA E2E letra.*"
+# Tapping the row plays it in the mini-player capsule; the lyric lives in the open player.
+- tapOn: "Open now playing|Abrir reprodução"
+- tapOn: "Lyrics|Letra"
+- takeScreenshot: 50-lyrics-before
+# The editor keeps the big sync button in view (the reading view scrolls with the song).
+- tapOn: "Edit lyrics|Editar letra"
+- scrollUntilVisible:
+    element: "Sync automatically.*|Sincronizar automaticamente.*"
+    direction: DOWN
+    timeout: 20000
+    # centred: at the bottom edge it sits under the player's tab bar and the tap misses
+    centerElement: true
+- takeScreenshot: 51-editor-sync
+- tapOn: "Sync automatically.*|Sincronizar automaticamente.*"
+# The editor closes and the lyric shows the job; wait for the result card at the top.
+- extendedWaitUntil:
+    visible: "Syncing.*|Sincronizando.*|.*lines synced.*|.*linhas sincronizadas.*"
+    timeout: 30000
+- takeScreenshot: 52-sync-requested
+- scrollUntilVisible:
+    element: ".*lines synced.*|.*linhas sincronizadas.*"
+    direction: UP
+    timeout: 300000
+- takeScreenshot: 53-sync-result
